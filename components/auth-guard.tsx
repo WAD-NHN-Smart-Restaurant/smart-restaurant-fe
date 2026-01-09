@@ -32,7 +32,8 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
 
     // If user is authenticated and trying to access auth pages (login, register)
     if (isAuthenticated && isCurrentPathAuth) {
-      router.push(PATHS.TABLES.INDEX);
+      // TODO: Redirect to ordered history instead of menu
+      router.push(PATHS.MENU.INDEX);
       return;
     }
   }, [isAuthenticated, isLoading, isUnauthenticated, pathname, router]);
@@ -109,7 +110,7 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
       // TODO: Redirect to ordered history instead of tables
-      router.push(PATHS.TABLES.INDEX);
+      router.push(PATHS.MENU.INDEX);
     }
   }, [isAuthenticated, isLoading, router]);
 

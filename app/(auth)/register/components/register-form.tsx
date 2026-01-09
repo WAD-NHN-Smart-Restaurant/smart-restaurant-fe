@@ -18,6 +18,7 @@ import { registerSchema } from "@/schema/auth-schema";
 import { RegisterFormData } from "@/types/auth-type";
 import { PATHS } from "@/data/path";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export const RegisterForm = () => {
   const {
@@ -25,6 +26,7 @@ export const RegisterForm = () => {
     isRegisterLoading,
     registerError,
   } = useAuth();
+  const router = useRouter();
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -39,6 +41,7 @@ export const RegisterForm = () => {
   const onSubmit = async (data: RegisterFormData) => {
     await registerUser(data);
     form.reset();
+    router.push("/verify-email?email=" + data.email);
   };
 
   return (

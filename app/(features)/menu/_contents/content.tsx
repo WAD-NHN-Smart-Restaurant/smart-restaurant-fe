@@ -9,12 +9,16 @@ import type {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useGuestMenuQuery } from "./use-guest-menu-query";
+import {
+  useGuestMenuQuery,
+  useGuestCategoryMenuQuery,
+} from "./use-guest-menu-query";
 import { LoadingState } from "../_components/loading-state";
 import { CategorySection } from "../_components/category-section";
 import { MenuItemDetailDialog } from "../_components/menu-item-detail-dialog";
 import { MenuFiltersSection, MenuFilters } from "../_components/menu-filters";
 import Cookies from "js-cookie";
+import { PageLoadingSkeleton } from "@/components/page-loading-skeleton";
 
 const GUEST_TOKEN_COOKIE = "guest_menu_token";
 
@@ -26,9 +30,16 @@ export function GuestMenuPreviewContent() {
   const pathname = usePathname();
   const tokenFromUrl = searchParams.get("token") || undefined;
   const tableId = searchParams.get("table") || undefined;
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle token management on mount
   useEffect(() => {
+    if (!isMounted) return;
     if (tokenFromUrl) {
       const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
 
@@ -50,7 +61,7 @@ export function GuestMenuPreviewContent() {
 
       router.replace(newUrl, { scroll: false });
     }
-  }, [tokenFromUrl, searchParams, pathname, router]);
+  }, [isMounted, tokenFromUrl, searchParams, pathname, router]);
 
   // Get token from cookie if not in URL
   const token = tokenFromUrl || Cookies.get(GUEST_TOKEN_COOKIE);
@@ -96,15 +107,20 @@ export function GuestMenuPreviewContent() {
   // Memoize query parameters
   const queryParams: GuestMenuQueryParams = useMemo(
     () => ({
-      token: "", // Guest access doesn't require authentication token
+      token: token || "", // Pass the actual token from cookie/URL
       categoryId: filters.categoryId,
+      search: filters.search,
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
+      chefRecommended: filters.chefRecommended,
       page: 1,
       limit: 100, // Get all items for preview
       table: tableId,
     }),
-    [filters.categoryId, tableId],
+    [token, filters, tableId],
   );
   const { data, isLoading, isError } = useGuestMenuQuery(queryParams);
+  const { data: categoriesData } = useGuestCategoryMenuQuery(token || "");
 
   const handleItemClick = useCallback((item: GuestMenuItem) => {
     setSelectedItem(item);
@@ -116,61 +132,41 @@ export function GuestMenuPreviewContent() {
     setSelectedItem(null);
   }, []);
 
-  // Get categories and apply client-side filtering and sorting
+  // Transform menu items into categories (backend handles filtering and sorting)
   const categories = useMemo(() => {
-    let items = data?.data?.items || [];
+    const menuItems = data?.data?.items || [];
 
-    // Apply search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      items = items
-        .map((category) => ({
-          ...category,
-          menuItems: category.menuItems.filter(
-            (item) =>
-              item.name.toLowerCase().includes(searchLower) ||
-              item.description?.toLowerCase().includes(searchLower),
-          ),
-        }))
-        .filter((category) => category.menuItems.length > 0);
-    }
+    // Group menu items by category
+    const categoriesMap = new Map<string, GuestCategory>();
 
-    // Apply chef recommended filter
-    if (filters.chefRecommended) {
-      items = items
-        .map((category) => ({
-          ...category,
-          menuItems: category.menuItems.filter(
-            (item) => item.isChefRecommended,
-          ),
-        }))
-        .filter((category) => category.menuItems.length > 0);
-    }
+    menuItems.forEach((item) => {
+      const categoryId = item.categoryId;
+      const categoryName = item.categoryName || "Uncategorized";
 
-    // Apply sorting
-    if (filters.sortBy && filters.sortOrder) {
-      items = items.map((category) => ({
-        ...category,
-        menuItems: [...category.menuItems].sort((a, b) => {
-          let compareValue = 0;
-          switch (filters.sortBy) {
-            case "name":
-              compareValue = a.name.localeCompare(b.name);
-              break;
-            case "price":
-              compareValue = a.price - b.price;
-              break;
-            case "prepTime":
-              compareValue = a.prepTimeMinutes - b.prepTimeMinutes;
-              break;
-          }
-          return filters.sortOrder === "asc" ? compareValue : -compareValue;
-        }),
-      }));
-    }
+      if (!categoriesMap.has(categoryId)) {
+        categoriesMap.set(categoryId, {
+          id: categoryId,
+          name: categoryName,
+          status: "active",
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          description: "",
+          displayOrder: 0,
+          restaurantId: item.restaurantId,
+          menuItems: [],
+        });
+      }
 
-    return items;
-  }, [data?.data?.items, filters]);
+      const category = categoriesMap.get(categoryId)!;
+      category.menuItems.push(item);
+    });
+
+    return Array.from(categoriesMap.values());
+  }, [data?.data?.items]);
+
+  if (!isMounted) {
+    return <PageLoadingSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -184,7 +180,7 @@ export function GuestMenuPreviewContent() {
         {/* Menu Filters */}
         <MenuFiltersSection
           filters={filters}
-          categories={[]}
+          categories={Array.isArray(categoriesData) ? categoriesData : []}
           onFiltersChange={handleFiltersChange}
         />
 
@@ -199,9 +195,9 @@ export function GuestMenuPreviewContent() {
             </Alert>
           )}
 
-          {isLoading && <LoadingState />}
-
-          {!isLoading && !isError && categories.length === 0 && (
+          {isLoading ? (
+            <LoadingState />
+          ) : !isError && categories.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-500">
                 {filters.search
@@ -209,9 +205,7 @@ export function GuestMenuPreviewContent() {
                   : "No menu items available."}
               </p>
             </div>
-          )}
-
-          {!isLoading && !isError && categories.length > 0 && (
+          ) : categories.length > 0 ? (
             <div className="space-y-8">
               {categories.map((category: GuestCategory) => (
                 <CategorySection
@@ -221,7 +215,7 @@ export function GuestMenuPreviewContent() {
                 />
               ))}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

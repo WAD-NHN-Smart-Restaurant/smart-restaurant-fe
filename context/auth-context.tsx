@@ -59,8 +59,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     "/login",
     "/register",
     "/forgot-password",
-    "/auth/reset-password",
-    "/auth/callback",
+    "/verify-email",
+    "/reset-password",
+    "/callback",
     "/",
   ];
   const isPublicRoute = publicRoutes.some(
@@ -143,15 +144,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Register mutation
   const registerMutation = useSafeMutation(registerApi, {
-    successMessage: "Registration successful! Please login.",
+    successMessage: "Registration successful! Please verify your email.",
     errorMessage: "Registration failed. Please try again.",
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      // Get email from response
+      const email = data?.data?.user?.email || "";
+
       // Invalidate and refetch auth queries
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.status });
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
 
-      // Redirect to login
-      router.push(AUTH_PATHS.LOGIN);
+      // Redirect to verify-email page
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     },
   });
 
@@ -211,7 +215,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // router.refresh();
 
         // const currentPath = window.location.pathname;
-        // if (!currentPath.startsWith('/auth/reset-password')) {
+        // if (!currentPath.startsWith('/reset-password')) {
         //   // TODO: Redirect to ordered history instead of menu
         //   router.push(PATHS.MENU.INDEX);
         // } else {
@@ -238,7 +242,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else if (event === "PASSWORD_RECOVERY") {
         // handle password recovery event
         // Redirect to reset password page
-        router.push("/auth/reset-password");
+        router.push("/reset-password");
       } else if (event === "TOKEN_REFRESHED") {
         // handle token refreshed event
         // Token has been refreshed, update queries
