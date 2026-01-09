@@ -67,6 +67,7 @@ export interface GuestCategory {
 
 // Query parameters for API calls
 export interface GuestMenuQueryParams {
+  token: string;
   table?: string;
   search?: string;
   categoryId?: string;

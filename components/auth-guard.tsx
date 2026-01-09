@@ -108,6 +108,7 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
+      // TODO: Redirect to ordered history instead of tables
       router.push(PATHS.TABLES.INDEX);
     }
   }, [isAuthenticated, isLoading, router]);

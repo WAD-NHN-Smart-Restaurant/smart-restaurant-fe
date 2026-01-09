@@ -10,6 +10,7 @@ import {
 import { AuthProvider } from "@/context/auth-context";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ToastContainer } from "react-toastify";
+
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {

@@ -86,6 +86,18 @@ export const LoginForm = () => {
             )}
           />
 
+          {/* Forgot Password Link */}
+          <div className="flex justify-end">
+            <Button
+              variant="link"
+              className="p-0 h-auto text-primary hover:text-primary/80"
+              disabled={isLoginLoading}
+              asChild
+            >
+              <Link href={PATHS.FORGOT_PASSWORD}>Forgot Password?</Link>
+            </Button>
+          </div>
+
           {/* Submit Button */}
           <Button type="submit" className="w-full" disabled={isLoginLoading}>
             {isLoginLoading ? (

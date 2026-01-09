@@ -96,6 +96,7 @@ export function GuestMenuPreviewContent() {
   // Memoize query parameters
   const queryParams: GuestMenuQueryParams = useMemo(
     () => ({
+      token: "", // Guest access doesn't require authentication token
       categoryId: filters.categoryId,
       page: 1,
       limit: 100, // Get all items for preview

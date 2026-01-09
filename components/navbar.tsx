@@ -36,10 +36,7 @@ export function Navbar() {
   ];
 
   const protectedNavItems: NavItem[] = [
-    {
-      title: "Tables",
-      href: PROTECTED_PATHS.TABLES.INDEX,
-    },
+    // Add more protected nav items as needed
   ];
 
   const allNavItems = isAuthenticated
