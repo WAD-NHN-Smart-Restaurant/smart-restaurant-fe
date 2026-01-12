@@ -8,6 +8,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { AuthProvider } from "@/context/auth-context";
+import { CartProvider } from "@/context/cart-context";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ToastContainer } from "react-toastify";
 function makeQueryClient() {
@@ -48,7 +49,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {process.env.NODE_ENV === "development" && <ReactQueryDevtools />}
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <CartProvider>{children}</CartProvider>
+      </AuthProvider>
       <ToastContainer />
     </QueryClientProvider>
   );

@@ -6,7 +6,7 @@ import type {
 } from "@/types/guest-menu-type";
 
 const GUEST_MENU_API = {
-  GET_MENU: "/api/menu",
+  GET_MENU: "/menu",
 };
 
 /**

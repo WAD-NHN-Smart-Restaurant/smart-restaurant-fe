@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Dialog,
@@ -13,6 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Star, Minus, Plus, ShoppingCart } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useCart, CartItem } from "@/context/cart-context";
+import { formatPrice } from "@/utils/format";
 import type { GuestMenuItem } from "@/types/guest-menu-type";
 
 interface MenuItemDetailDialogProps {
@@ -30,10 +34,13 @@ export function MenuItemDetailDialog({
   isOpen,
   onClose,
 }: MenuItemDetailDialogProps) {
+  const router = useRouter();
+  const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [selectedModifiers, setSelectedModifiers] = useState<SelectedModifiers>(
     {},
   );
+  const [specialRequest, setSpecialRequest] = useState("");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
   // Calculate total price with modifiers
@@ -96,27 +103,62 @@ export function MenuItemDetailDialog({
     });
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(price);
-  };
-
   const handleQuantityChange = (delta: number) => {
     setQuantity((prev) => Math.max(1, prev + delta));
   };
 
   const handleAddToCart = () => {
-    // Mock add to cart functionality
-    console.log("Added to cart:", {
-      item: item.name,
-      quantity,
-      modifiers: selectedModifiers,
-      totalPrice,
+    // Validate required modifiers
+    for (const { modifierGroups } of item.menuItemModifierGroups) {
+      if (
+        modifierGroups.isRequired &&
+        !selectedModifiers[modifierGroups.id]?.length
+      ) {
+        alert(`Vui lòng chọn ${modifierGroups.name}`);
+        return;
+      }
+    }
+
+    // Convert selected modifiers to options
+    const options: Array<{
+      optionId: string;
+      optionName: string;
+      priceAtTime: number;
+    }> = [];
+
+    item.menuItemModifierGroups.forEach(({ modifierGroups }) => {
+      const selectedOptions = selectedModifiers[modifierGroups.id] || [];
+      selectedOptions.forEach((optionId) => {
+        const option = modifierGroups.modifierOptions.find(
+          (opt) => opt.id === optionId,
+        );
+        if (option) {
+          options.push({
+            optionId: option.id,
+            optionName: option.name,
+            priceAtTime: option.priceAdjustment,
+          });
+        }
+      });
     });
-    // Show success message or close dialog
+
+    // Create cart item
+    const cartItem: CartItem = {
+      menuItemId: item.id,
+      menuItemName: item.name,
+      price: item.price,
+      quantity,
+      specialRequest: specialRequest || undefined,
+      options,
+    };
+
+    addItem(cartItem);
     onClose();
+
+    // Show success and navigate to cart
+    setTimeout(() => {
+      router.push("/checkout");
+    }, 300);
   };
 
   return (
@@ -131,7 +173,7 @@ export function MenuItemDetailDialog({
                 className="bg-yellow-100 text-yellow-800"
               >
                 <Star className="h-3 w-3 fill-current mr-1" />
-                Chef&apos;s Choice
+                Đặc biệt
               </Badge>
             )}
           </DialogTitle>
@@ -155,8 +197,8 @@ export function MenuItemDetailDialog({
                 <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
                   <Badge variant="destructive" className="text-lg px-4 py-2">
                     {item.status === "unavailable"
-                      ? "Unavailable"
-                      : "Out of Stock"}
+                      ? "Hết hàng"
+                      : "Không có sẵn"}
                   </Badge>
                 </div>
               )}
@@ -199,7 +241,7 @@ export function MenuItemDetailDialog({
                 </span>
                 <div className="flex items-center gap-1 text-gray-500">
                   <Clock className="h-4 w-4" />
-                  <span className="text-sm">{item.prepTimeMinutes} min</span>
+                  <span className="text-sm">{item.prepTimeMinutes} phút</span>
                 </div>
               </div>
               {item.description && (
@@ -212,7 +254,7 @@ export function MenuItemDetailDialog({
             {/* Modifiers */}
             {item.menuItemModifierGroups.length > 0 && (
               <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Customize Your Order</h3>
+                <h3 className="font-semibold text-lg">Tuỳ chọn</h3>
                 {item.menuItemModifierGroups.map(({ modifierGroups }) => {
                   if (modifierGroups.status !== "active") return null;
 
@@ -224,14 +266,14 @@ export function MenuItemDetailDialog({
                             {modifierGroups.name}
                             {modifierGroups.isRequired && (
                               <Badge variant="outline" className="text-xs">
-                                Required
+                                Bắt buộc
                               </Badge>
                             )}
                           </h4>
                           <p className="text-xs text-gray-500">
                             {modifierGroups.selectionType === "single"
-                              ? "Choose one"
-                              : `Choose up to ${modifierGroups.maxSelections}`}
+                              ? "Chọn 1 cái"
+                              : `Chọn tối đa ${modifierGroups.maxSelections}`}
                           </p>
                         </div>
                         <div className="space-y-2">
@@ -290,12 +332,24 @@ export function MenuItemDetailDialog({
               </div>
             )}
 
+            {/* Special Request */}
+            <div>
+              <h4 className="font-medium mb-2">Ghi chú đặc biệt</h4>
+              <Textarea
+                placeholder="Ví dụ: Không cay, thêm rau..."
+                value={specialRequest}
+                onChange={(e) => setSpecialRequest(e.target.value)}
+                className="resize-none"
+                rows={2}
+              />
+            </div>
+
             <Separator />
 
             {/* Quantity and Add to Cart */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="font-medium">Quantity</span>
+                <span className="font-medium">Số lượng</span>
                 <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
@@ -319,7 +373,7 @@ export function MenuItemDetailDialog({
               </div>
 
               <div className="flex items-center justify-between text-lg font-semibold">
-                <span>Total</span>
+                <span>Tổng</span>
                 <span className="text-green-600">
                   {formatPrice(totalPrice)}
                 </span>
@@ -332,8 +386,8 @@ export function MenuItemDetailDialog({
               >
                 <ShoppingCart className="h-5 w-5 mr-2" />
                 {item.status === "available"
-                  ? "Add to Cart"
-                  : "Currently Unavailable"}
+                  ? "Thêm vào giỏ"
+                  : "Hiện không có sẵn"}
               </Button>
             </div>
           </div>
