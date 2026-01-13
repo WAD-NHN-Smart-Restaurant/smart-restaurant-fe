@@ -13,7 +13,7 @@ import {
   checkAuthStatus,
 } from "@/api/auth-api";
 import { tokenManager } from "@/libs/api-request";
-import { createClient } from "@/libs/supabase";
+import { createClient } from "@/libs/supabase/client";
 import { AUTH_PATHS, PATHS } from "@/data/path";
 import { LoginFormData, RegisterFormData, User } from "@/types/auth-type";
 
@@ -57,6 +57,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Public routes that don't need authentication checks
   const publicRoutes = [
     "/login",
+    "/login-google/callback",
     "/register",
     "/forgot-password",
     "/verify-email",
@@ -212,6 +213,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         );
         queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.status });
         queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+
         // router.refresh();
 
         // const currentPath = window.location.pathname;

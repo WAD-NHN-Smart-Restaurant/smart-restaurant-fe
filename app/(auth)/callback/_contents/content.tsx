@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tokenManager } from "@/libs/api-request";
-import { createClient } from "@/libs/supabase";
+import { createClient } from "@/libs/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,

@@ -18,6 +18,7 @@ import { loginSchema } from "@/schema/auth-schema";
 import { LoginFormData } from "@/types/auth-type";
 import Link from "next/link";
 import { PATHS } from "@/data/path";
+import { GoogleSignInButton } from "./google-sign-in-button";
 
 export const LoginForm = () => {
   const { login, isLoginLoading, loginError } = useAuth();
@@ -117,6 +118,21 @@ export const LoginForm = () => {
           )}
         </form>
       </Form>
+
+      {/* Divider */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            Or continue with
+          </span>
+        </div>
+      </div>
+
+      {/* Google Sign In Button */}
+      <GoogleSignInButton />
 
       {/* Footer */}
       <div className="text-center space-y-4">

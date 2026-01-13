@@ -1,17 +1,12 @@
-import { createBrowserClient, createServerClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-  );
-}
 
 const publicRoutes = [
   "/login",
+  "/login-google/callback",
   "/register",
   "/forgot-password",
+  "/reset-password",
   "/verify-email",
   "/reset-password",
   "/callback",
@@ -70,7 +65,7 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // 🔐 BẮT BUỘC: sync + verify JWT
+  // BẮT BUỘC: sync + verify JWT
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 

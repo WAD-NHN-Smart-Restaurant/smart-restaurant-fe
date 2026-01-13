@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Lock, Eye, EyeOff } from "lucide-react";
-import { createClient } from "@/libs/supabase";
+import { createClient } from "@/libs/supabase/client";
 import { AUTH_PATHS } from "@/data/path";
 
 const resetPasswordSchema = z
