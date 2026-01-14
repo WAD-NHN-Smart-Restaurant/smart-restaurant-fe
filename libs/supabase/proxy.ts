@@ -10,6 +10,7 @@ const publicRoutes = [
   "/verify-email",
   "/reset-password",
   "/callback",
+  "/menu",
   "/",
 ];
 
