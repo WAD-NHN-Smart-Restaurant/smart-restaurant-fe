@@ -190,6 +190,11 @@ export function MenuItemDetailDialog({
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 50vw"
+                  unoptimized
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = "none";
+                  }}
                 />
               )}
 
@@ -224,6 +229,11 @@ export function MenuItemDetailDialog({
                         fill
                         className="object-cover"
                         sizes="64px"
+                        unoptimized
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = "none";
+                        }}
                       />
                     )}
                   </button>

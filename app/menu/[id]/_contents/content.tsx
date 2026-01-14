@@ -222,6 +222,16 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                 className="object-cover"
                 sizes="100vw"
                 priority
+                unoptimized
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = "none";
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML =
+                      '<div class="absolute inset-0 flex items-center justify-center text-6xl">🍽️</div>';
+                  }
+                }}
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-6xl">
@@ -258,6 +268,16 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                       fill
                       className="object-cover"
                       sizes="64px"
+                      unoptimized
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML =
+                            '<div class="absolute inset-0 flex items-center justify-center bg-gray-100">🍽️</div>';
+                        }
+                      }}
                     />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-100">

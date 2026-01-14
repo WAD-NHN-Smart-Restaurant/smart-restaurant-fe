@@ -35,6 +35,11 @@ export function MenuItemCard({ item, onItemClick }: MenuItemCardProps) {
             width={400}
             height={300}
             className="w-full md:h-60 object-cover"
+            unoptimized
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = "none";
+            }}
           />
         )}
 

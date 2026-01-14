@@ -32,7 +32,9 @@ export default function RootLayout({
       >
         <Providers>
           <DevTokenInjector />
-          <main>{children}</main>
+          <div className="app-wrapper">
+            <main className="mobile-container">{children}</main>
+          </div>
         </Providers>
       </body>
     </html>

@@ -1,13 +1,37 @@
 /* Mobile-first mockup-inspired styles for Smart Restaurant Guest App */
 
+/* App Wrapper - Centers mobile view */
+.app-wrapper {
+  min-height: 100vh;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+}
+
 /* Mobile Container */
 .mobile-container {
   max-width: 480px;
+  width: 100%;
   margin: 0 auto;
   background: #fff;
-  min-height: 100vh;
+  min-height: calc(100vh - 40px);
   position: relative;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 32px 32px 0 0;
+  overflow: hidden;
+}
+
+@media (max-width: 480px) {
+  .app-wrapper {
+    padding: 0;
+  }
+  
+  .mobile-container {
+    min-height: 100vh;
+    border-radius: 0;
+  }
 }
 
 /* Header */
@@ -21,6 +45,13 @@
   position: sticky;
   top: 0;
   z-index: 100;
+  border-radius: 32px 32px 0 0;
+}
+
+@media (max-width: 480px) {
+  .header {
+    border-radius: 0;
+  }
 }
 
 .header-back {

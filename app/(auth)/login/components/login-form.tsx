@@ -41,26 +41,15 @@ export const LoginForm = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        background: "#f8f9fa",
-      }}
-    >
-      {/* Red Header */}
+    <div className="mobile-container" style={{ background: "#f8f9fa" }}>
+      {/* Red Header with curved bottom */}
       <div
         style={{
-          width: "100%",
-          maxWidth: "480px",
           background: "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)",
           color: "white",
-          padding: "40px 20px",
+          padding: "60px 20px 80px 20px",
           textAlign: "center",
-          borderBottomLeftRadius: "30px",
-          borderBottomRightRadius: "30px",
+          borderRadius: "32px 32px 0 0",
           position: "relative",
         }}
       >
@@ -73,16 +62,16 @@ export const LoginForm = () => {
         </p>
       </div>
 
-      {/* White Form Container */}
+      {/* White Form Container - overlapping header */}
       <div
         style={{
-          width: "100%",
-          maxWidth: "480px",
           background: "white",
-          padding: "30px 20px",
-          margin: "20px",
-          borderRadius: "12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          padding: "30px 20px 40px 20px",
+          margin: "-50px 0px 0px 0px",
+          borderRadius: "20px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          position: "relative",
+          zIndex: 10,
         }}
       >
         <h2

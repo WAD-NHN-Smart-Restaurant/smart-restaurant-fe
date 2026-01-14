@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect, useState } from "react";
 import type {
   GuestCategory,
   GuestMenuItem,
@@ -8,6 +8,7 @@ import type {
 } from "@/types/guest-menu-type";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { getTableInfo } from "@/api/table-api";
 
 interface MenuFilters {
   search?: string;
@@ -37,68 +38,109 @@ export function GuestMenuPreviewContent() {
   const pathname = usePathname();
   const tokenFromUrl = searchParams.get("token") || undefined;
   const tableId = searchParams.get("table") || undefined;
-  const tableNumber = searchParams.get("tableNumber") || undefined;
+  const tableNumberFromUrl = searchParams.get("tableNumber") || undefined;
+
+  // State to trigger re-render when localStorage is updated
+  const [tableNumber, setTableNumber] = useState<string | undefined>(() => {
+    // Initialize from localStorage on first render
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("guest_table_number") || undefined;
+    }
+    return undefined;
+  });
 
   // Handle token management on mount
   useEffect(() => {
-    let tokenToUse = tokenFromUrl;
+    const handleTokenManagement = async () => {
+      let tokenToUse = tokenFromUrl;
 
-    // For local testing: use test token from env if no URL token
-    if (!tokenToUse && process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN) {
-      tokenToUse = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
-      console.log("Using test token from environment");
-    }
-
-    if (tokenToUse) {
-      const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
-
-      // Save or update token in cookie if it's different
-      if (!existingToken || existingToken !== tokenToUse) {
-        Cookies.set(GUEST_TOKEN_COOKIE, tokenToUse, {
-          expires: 7, // Cookie expires in 7 days
-          sameSite: "lax",
-        });
+      // For local testing: use test token from env if no URL token
+      if (!tokenToUse && process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN) {
+        tokenToUse = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+        console.log("Using test token from environment");
       }
 
-      // Decode JWT to get tableId and tableNumber, save to localStorage
-      try {
-        const payload = JSON.parse(atob(tokenToUse.split(".")[1]));
-        if (payload.tableId) {
-          localStorage.setItem("guest_table_id", payload.tableId);
-          console.log("Saved tableId to localStorage:", payload.tableId);
+      if (tokenToUse) {
+        const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
+
+        // Save or update token in cookie if it's different
+        if (!existingToken || existingToken !== tokenToUse) {
+          Cookies.set(GUEST_TOKEN_COOKIE, tokenToUse, {
+            expires: 7, // Cookie expires in 7 days
+            sameSite: "lax",
+          });
         }
-        if (payload.tableNumber) {
-          localStorage.setItem(
-            "guest_table_number",
-            String(payload.tableNumber),
-          );
-          console.log(
-            "Saved tableNumber to localStorage:",
-            payload.tableNumber,
-          );
+
+        // Decode JWT to get tableId and tableNumber, save to localStorage
+        try {
+          const payload = JSON.parse(atob(tokenToUse.split(".")[1]));
+          console.log("JWT Payload:", payload); // Debug: see full payload
+
+          if (payload.tableId) {
+            localStorage.setItem("guest_table_id", payload.tableId);
+            console.log("Saved tableId to localStorage:", payload.tableId);
+          }
+
+          // Handle table number: use from JWT if available, otherwise fetch from backend
+          if (payload.tableNumber) {
+            localStorage.setItem(
+              "guest_table_number",
+              String(payload.tableNumber),
+            );
+            setTableNumber(String(payload.tableNumber));
+            console.log(
+              "Saved tableNumber from JWT to localStorage:",
+              payload.tableNumber,
+            );
+          } else if (payload.tableId) {
+            // Fetch table info from backend to get table_number
+            try {
+              const tableInfo = await getTableInfo(payload.tableId);
+              if (tableInfo.table_number) {
+                localStorage.setItem(
+                  "guest_table_number",
+                  String(tableInfo.table_number),
+                );
+                setTableNumber(String(tableInfo.table_number));
+                console.log(
+                  "Fetched and saved tableNumber from backend:",
+                  tableInfo.table_number,
+                );
+              }
+            } catch (error) {
+              console.error("Failed to fetch table info:", error);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to decode token:", error);
         }
-      } catch (error) {
-        console.error("Failed to decode token:", error);
+
+        // Remove token from URL (only if it came from URL)
+        if (tokenFromUrl) {
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete("token");
+
+          const newUrl = params.toString()
+            ? `${pathname}?${params.toString()}`
+            : pathname;
+
+          router.replace(newUrl, { scroll: false });
+        }
       }
 
-      // Remove token from URL (only if it came from URL)
-      if (tokenFromUrl) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.delete("token");
-
-        const newUrl = params.toString()
-          ? `${pathname}?${params.toString()}`
-          : pathname;
-
-        router.replace(newUrl, { scroll: false });
+      // Save tableNumber from URL to localStorage (always prioritize URL param)
+      if (tableNumberFromUrl) {
+        localStorage.setItem("guest_table_number", tableNumberFromUrl);
+        setTableNumber(tableNumberFromUrl);
+        console.log(
+          "Saved tableNumber from URL to localStorage:",
+          tableNumberFromUrl,
+        );
       }
-    }
+    };
 
-    // Save tableNumber from URL to localStorage (override if provided)
-    if (tableNumber) {
-      localStorage.setItem("guest_table_number", tableNumber);
-    }
-  }, [tokenFromUrl, tableNumber, searchParams, pathname, router]);
+    handleTokenManagement();
+  }, [tokenFromUrl, tableNumberFromUrl, searchParams, pathname, router]);
 
   // Token is persisted in cookie above when present in URL
 
@@ -343,6 +385,16 @@ export function GuestMenuPreviewContent() {
                           fill
                           className="object-cover"
                           sizes="100px"
+                          unoptimized
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML =
+                                '<span class="text-4xl">🍽️</span>';
+                            }
+                          }}
                         />
                       ) : (
                         <span className="text-4xl">🍽️</span>
