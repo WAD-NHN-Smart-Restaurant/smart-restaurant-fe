@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 export interface MenuFilters {
   search?: string;
   categoryId?: string;
-  sortBy?: "name" | "price" | "prepTime";
+  sortBy?: "name" | "price" | "popularity";
   sortOrder?: "asc" | "desc";
   chefRecommended?: boolean;
 }
@@ -45,7 +45,7 @@ export function MenuFiltersSection({
 }: MenuFiltersProps) {
   return (
     <Card className="mb-6 shadow-sm">
-      <CardContent className="pt-6">
+      <CardContent>
         <div className="flex items-center gap-2 mb-4">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold text-foreground">
@@ -89,11 +89,12 @@ export function MenuFiltersSection({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
+                  {Array.isArray(categories) &&
+                    categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -109,7 +110,7 @@ export function MenuFiltersSection({
                     <div className="flex gap-1 items-center font-normal">
                       {filters.sortBy === "name" && "Name"}
                       {filters.sortBy === "price" && "Price"}
-                      {filters.sortBy === "prepTime" && "Prep Time"}
+                      {filters.sortBy === "popularity" && "Popularity"}
                       {!filters.sortBy && "Default"}
                       {filters.sortOrder && (
                         <span>{filters.sortOrder === "desc" ? "↓" : "↑"}</span>
@@ -193,30 +194,30 @@ export function MenuFiltersSection({
 
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                      <span>Prep Time</span>
+                      <span>Popularity</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                       <DropdownMenuItem
                         onClick={() =>
                           onFiltersChange({
                             ...filters,
-                            sortBy: "prepTime",
+                            sortBy: "popularity",
                             sortOrder: "asc",
                           })
                         }
                       >
-                        ↑ Fastest First
+                        ↑ Low to High
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() =>
                           onFiltersChange({
                             ...filters,
-                            sortBy: "prepTime",
+                            sortBy: "popularity",
                             sortOrder: "desc",
                           })
                         }
                       >
-                        ↓ Slowest First
+                        ↓ High to Low
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
@@ -224,7 +225,7 @@ export function MenuFiltersSection({
               </DropdownMenu>
             </div>
 
-            <div className="space-y-2">
+            <div>
               <Label htmlFor="chef-recommended" className="text-sm font-medium">
                 Chef&apos;s Pick
               </Label>
