@@ -32,7 +32,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
 
     // If user is authenticated and trying to access auth pages (login, register)
     if (isAuthenticated && isCurrentPathAuth) {
-      router.push(PATHS.TABLES.INDEX);
+      router.push("/menu");
       return;
     }
   }, [isAuthenticated, isLoading, isUnauthenticated, pathname, router]);
@@ -107,14 +107,24 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      router.push(PATHS.TABLES.INDEX);
+    // Only redirect authenticated users away from auth pages
+    if (!isLoading && isAuthenticated) {
+      console.log("[PublicRoute] User is authenticated, redirecting to /menu");
+      router.push("/menu");
     }
   }, [isAuthenticated, isLoading, router]);
 
-  if (isLoading || isAuthenticated) {
+  // Show loading while checking authentication status
+  if (isLoading) {
     return <LoadingSpinner />;
   }
 
+  // If user is authenticated, don't show the auth page content
+  // (they will be redirected by useEffect)
+  if (isAuthenticated) {
+    return <LoadingSpinner />;
+  }
+
+  // Show the auth page for non-authenticated users
   return <>{children}</>;
 };

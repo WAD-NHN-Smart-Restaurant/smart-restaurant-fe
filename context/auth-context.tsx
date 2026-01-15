@@ -13,7 +13,7 @@ import {
   checkAuthStatus,
 } from "@/api/auth-api";
 import { tokenManager } from "@/libs/api-request";
-import { AUTH_PATHS, PATHS } from "@/data/path";
+import { AUTH_PATHS } from "@/data/path";
 import { LoginFormData, RegisterFormData, User } from "@/types/auth-type";
 
 // Auth context type
@@ -78,9 +78,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.status });
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
 
-      // Redirect to dashboard
+      // Redirect to menu
       router.refresh();
-      router.push(PATHS.TABLES.INDEX);
+      router.push("/menu");
     },
   });
 

@@ -409,12 +409,12 @@ export function GuestMenuPreviewContent() {
                         </div>
                         {/* Status Badge */}
                         <span
-                          className={`menu-item-status ${item.status === "available" ? "available" : "sold-out"}`}
+                          className={`menu-item-status ${item.status === "available" ? "available" : item.status === "sold_out" ? "sold-out" : "unavailable"}`}
                         >
                           ●{" "}
                           {item.status === "available"
                             ? "Available"
-                            : item.status === "out_of_stock"
+                            : item.status === "sold_out"
                               ? "Sold Out"
                               : "Unavailable"}
                         </span>

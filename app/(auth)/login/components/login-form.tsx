@@ -16,9 +16,11 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { loginSchema } from "@/schema/auth-schema";
 import { LoginFormData } from "@/types/auth-type";
+import { generateGuestToken } from "@/api/auth-api";
 import Link from "next/link";
 import { PATHS } from "@/data/path";
 import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
 
 export const LoginForm = () => {
   const router = useRouter();
@@ -37,6 +39,23 @@ export const LoginForm = () => {
   };
 
   const handleGuestAccess = () => {
+    // Get guest token from environment or generate anonymous token
+    const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+
+    if (testToken) {
+      // Use test token for guest access
+      const guestToken = generateGuestToken(testToken);
+      Cookies.set("guest_menu_token", guestToken, {
+        expires: 1, // 1 day
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+      });
+    } else {
+      // If no test token, log warning but still redirect
+      console.warn("No test table token configured for guest access");
+    }
+
+    // Redirect to menu
     router.push("/menu");
   };
 

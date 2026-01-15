@@ -44,7 +44,7 @@ export interface GuestMenuItem {
   description?: string;
   price: number;
   prepTimeMinutes: number;
-  status: "available" | "unavailable" | "out_of_stock";
+  status: "available" | "unavailable" | "sold_out";
   isChefRecommended: boolean;
   isDeleted: boolean;
   createdAt: string;

@@ -17,7 +17,7 @@ export function MobileHeader({
   const router = useRouter();
 
   return (
-    <div className="header">
+    <div className="header" suppressHydrationWarning>
       {showBack ? (
         <button onClick={() => router.back()} className="header-back">
           <ArrowLeft size={24} />
@@ -26,7 +26,11 @@ export function MobileHeader({
         <span style={{ fontSize: "24px" }}>☰</span>
       )}
       <span className="header-title">{title}</span>
-      {tableNumber && <span className="header-table">Table {tableNumber}</span>}
+      {tableNumber && (
+        <span className="header-table" suppressHydrationWarning>
+          Table {tableNumber}
+        </span>
+      )}
     </div>
   );
 }

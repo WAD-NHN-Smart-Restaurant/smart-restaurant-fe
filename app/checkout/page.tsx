@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { PageLoadingSkeleton } from "@/components/page-loading-skeleton";
 
 export const metadata: Metadata = {
-  title: "Place Order | Smart Restaurant",
+  title: "Cart | Smart Restaurant",
   description: "Complete your order",
 };
 
