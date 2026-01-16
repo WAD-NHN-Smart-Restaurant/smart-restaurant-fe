@@ -16,6 +16,7 @@ const GUEST_MENU_QUERY_KEYS = {
 export const useGuestMenuQuery = (params?: GuestMenuQueryParams) => {
   // Token is injected via axios interceptor from cookie, so we just need to check if it exists
   const hasToken =
+    !!params?.token ||
     !!Cookies.get("guest_menu_token") ||
     !!process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
 

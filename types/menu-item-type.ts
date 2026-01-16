@@ -17,9 +17,7 @@ export interface MenuItem {
   isDeleted?: boolean;
   createdAt: string;
   updatedAt: string;
-  menuCategories: {
-    name: string;
-  };
+  categoryName: string;
   menuItemPhotos: MenuItemPhoto[];
   menuItemModifierGroups: ModifierGroup[];
 }

@@ -13,22 +13,23 @@ import { getTableInfo } from "@/api/table-api";
 interface MenuFilters {
   search?: string;
   categoryId?: string;
-  sortByPopularity?: boolean;
+  sortBy?: "popularity" | "price" | "name";
+  sortOrder?: "asc" | "desc";
   chefRecommended?: boolean;
 }
 
-// Extended type for menu items with popularity score from backend
-interface GuestMenuItemWithPopularity extends GuestMenuItem {
-  popularity?: number;
-}
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useGuestMenuQuery } from "./use-guest-menu-query";
+import {
+  useGuestMenuQuery,
+  useGuestCategoryMenuQuery,
+} from "./use-guest-menu-query";
 import { LoadingState } from "../_components/loading-state";
 import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
 import { formatPrice } from "@/utils/format";
 import Cookies from "js-cookie";
 import Image from "next/image";
+import { PageLoadingSkeleton } from "@/components/page-loading-skeleton";
 
 const GUEST_TOKEN_COOKIE = "guest_menu_token";
 
@@ -39,18 +40,28 @@ export function GuestMenuPreviewContent() {
   const tokenFromUrl = searchParams.get("token") || undefined;
   const tableId = searchParams.get("table") || undefined;
   const tableNumberFromUrl = searchParams.get("tableNumber") || undefined;
+  const [isMounted, setIsMounted] = useState(false);
 
   // State to trigger re-render when localStorage is updated
-  const [tableNumber, setTableNumber] = useState<string | undefined>(() => {
-    // Initialize from localStorage on first render
+  // Initialize as undefined to avoid hydration mismatch
+  const [tableNumber, setTableNumber] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    setIsMounted(true);
+    // Load table number from localStorage after mount to avoid hydration issues
     if (typeof window !== "undefined") {
-      return localStorage.getItem("guest_table_number") || undefined;
+      const storedTableNumber = localStorage.getItem("guest_table_number");
+      if (storedTableNumber) {
+        setTableNumber(storedTableNumber);
+      }
     }
-    return undefined;
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle token management on mount
   useEffect(() => {
+    if (!isMounted) return;
+
     const handleTokenManagement = async () => {
       let tokenToUse = tokenFromUrl;
 
@@ -66,7 +77,7 @@ export function GuestMenuPreviewContent() {
         // Save or update token in cookie if it's different
         if (!existingToken || existingToken !== tokenToUse) {
           Cookies.set(GUEST_TOKEN_COOKIE, tokenToUse, {
-            expires: 7, // Cookie expires in 7 days
+            expires: 7, // TODO: Adjust expiration as needed
             sameSite: "lax",
           });
         }
@@ -140,17 +151,28 @@ export function GuestMenuPreviewContent() {
     };
 
     handleTokenManagement();
-  }, [tokenFromUrl, tableNumberFromUrl, searchParams, pathname, router]);
+  }, [
+    isMounted,
+    tokenFromUrl,
+    tableNumberFromUrl,
+    searchParams,
+    pathname,
+    router,
+  ]);
 
   // Token is persisted in cookie above when present in URL
+  const token = tokenFromUrl || Cookies.get(GUEST_TOKEN_COOKIE);
 
   // Read filters from URL search params
   const filters: MenuFilters = useMemo(
     () => ({
       search: searchParams.get("search") || undefined,
       categoryId: searchParams.get("categoryId") || undefined,
-      sortByPopularity:
-        searchParams.get("sortByPopularity") === "true" || undefined,
+      sortBy:
+        (searchParams.get("sortBy") as MenuFilters["sortBy"]) || undefined,
+      sortOrder:
+        (searchParams.get("sortOrder") as MenuFilters["sortOrder"]) ||
+        undefined,
       chefRecommended:
         searchParams.get("chefRecommended") === "true" || undefined,
     }),
@@ -183,14 +205,20 @@ export function GuestMenuPreviewContent() {
   // Memoize query parameters
   const queryParams: GuestMenuQueryParams = useMemo(
     () => ({
+      token: token || "", // Pass the actual token from cookie/URL
       categoryId: filters.categoryId,
+      search: filters.search,
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
+      chefRecommended: filters.chefRecommended,
       page: 1,
       limit: 100, // Get all items for preview
       table: tableId,
     }),
-    [filters.categoryId, tableId],
+    [token, filters, tableId],
   );
   const { data, isLoading, isError } = useGuestMenuQuery(queryParams);
+  const { data: categoriesData } = useGuestCategoryMenuQuery(token || "");
 
   const handleItemClick = useCallback(
     (item: GuestMenuItem) => {
@@ -205,59 +233,94 @@ export function GuestMenuPreviewContent() {
 
   // Get all categories for tabs (unfiltered)
   const allCategories = useMemo(() => {
-    return data?.data?.items || [];
+    const items = data?.data?.items || [];
+    const categoryMap = new Map<string, GuestCategory>();
+
+    items.forEach((item: GuestMenuItem) => {
+      if (!categoryMap.has(item.categoryId)) {
+        categoryMap.set(item.categoryId, {
+          id: item.categoryId,
+          name: item.categoryName,
+          description: undefined,
+          status: "active" as const,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          displayOrder: 0,
+          restaurantId: item.restaurantId,
+          menuItems: [],
+        });
+      }
+      categoryMap.get(item.categoryId)!.menuItems.push(item);
+    });
+
+    return Array.from(categoryMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }, [data?.data?.items]);
 
   // Get filtered categories and apply client-side filtering and sorting
-  const categories = useMemo(() => {
-    let items = data?.data?.items || [];
+  const categories: GuestCategory[] = useMemo(() => {
+    const items = data?.data?.items || [];
+    const categoryMap = new Map<string, GuestCategory>();
+
+    // Build categories from menu items
+    items.forEach((item: GuestMenuItem) => {
+      if (!categoryMap.has(item.categoryId)) {
+        categoryMap.set(item.categoryId, {
+          id: item.categoryId,
+          name: item.categoryName,
+          description: undefined,
+          status: "active" as const,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          displayOrder: 0,
+          restaurantId: item.restaurantId,
+          menuItems: [],
+        });
+      }
+      categoryMap.get(item.categoryId)!.menuItems.push(item);
+    });
+
+    let categoriesArray = Array.from(categoryMap.values());
 
     // Apply category filter
     if (filters.categoryId) {
-      items = items.filter((cat) => cat.id === filters.categoryId);
+      categoriesArray = categoriesArray.filter(
+        (cat: GuestCategory) => cat.id === filters.categoryId,
+      );
     }
 
     // Apply search filter
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      items = items
-        .map((category) => ({
+      categoriesArray = categoriesArray
+        .map((category: GuestCategory) => ({
           ...category,
           menuItems: category.menuItems.filter(
-            (item) =>
+            (item: GuestMenuItem) =>
               item.name.toLowerCase().includes(searchLower) ||
               item.description?.toLowerCase().includes(searchLower),
           ),
         }))
-        .filter((category) => category.menuItems.length > 0);
+        .filter((category: GuestCategory) => category.menuItems.length > 0);
     }
 
     // Apply chef recommended filter
     if (filters.chefRecommended) {
-      items = items
-        .map((category) => ({
+      categoriesArray = categoriesArray
+        .map((category: GuestCategory) => ({
           ...category,
           menuItems: category.menuItems.filter(
-            (item) => item.isChefRecommended,
+            (item: GuestMenuItem) => item.isChefRecommended,
           ),
         }))
-        .filter((category) => category.menuItems.length > 0);
+        .filter((category: GuestCategory) => category.menuItems.length > 0);
     }
 
-    // Apply popularity sorting (descending - most popular first)
-    if (filters.sortByPopularity) {
-      items = items.map((category) => ({
-        ...category,
-        menuItems: [...category.menuItems].sort((a, b) => {
-          // Sort by popularity score from backend
-          const aScore = (a as GuestMenuItemWithPopularity).popularity || 0;
-          const bScore = (b as GuestMenuItemWithPopularity).popularity || 0;
-          return bScore - aScore;
-        }),
-      }));
-    }
+    // Note: Sorting is handled by the backend API
+    // The items are already sorted by the backend based on sortBy and sortOrder params
 
-    return items;
+    return categoriesArray.sort((a, b) => a.name.localeCompare(b.name));
   }, [data?.data?.items, filters]);
 
   return (
@@ -300,12 +363,21 @@ export function GuestMenuPreviewContent() {
           </button>
           <select
             className="px-3 py-1.5 rounded-full text-sm border border-gray-300 bg-white"
-            value={filters.sortByPopularity ? "popularity" : ""}
+            value={filters.sortBy === "popularity" && filters.sortOrder === "desc" ? "popularity" : ""}
             onChange={(e) => {
-              handleFiltersChange({
-                ...filters,
-                sortByPopularity: e.target.value === "popularity" || undefined,
-              });
+              if (e.target.value === "popularity") {
+                handleFiltersChange({
+                  ...filters,
+                  sortBy: "popularity",
+                  sortOrder: "desc",
+                });
+              } else {
+                handleFiltersChange({
+                  ...filters,
+                  sortBy: undefined,
+                  sortOrder: undefined,
+                });
+              }
             }}
           >
             <option value="">Sort by</option>
@@ -324,7 +396,7 @@ export function GuestMenuPreviewContent() {
         >
           All
         </button>
-        {allCategories.map((category: GuestCategory) => (
+        {allCategories.map((category) => (
           <button
             key={category.id}
             className={`category-tab ${filters.categoryId === category.id ? "active" : ""}`}
@@ -362,12 +434,12 @@ export function GuestMenuPreviewContent() {
 
         {!isLoading && !isError && categories.length > 0 && (
           <>
-            {categories.map((category: GuestCategory) =>
+            {categories.map((category) =>
               category.menuItems.map((item) => {
                 // Get primary photo or first photo
                 const primaryPhoto =
-                  item.menuItemPhotos.find((photo) => photo.isPrimary) ||
-                  item.menuItemPhotos[0];
+                  item.menuItemPhotos?.find((photo) => photo.isPrimary) ||
+                  item.menuItemPhotos?.[0];
 
                 const isAvailable = item.status === "available";
                 return (

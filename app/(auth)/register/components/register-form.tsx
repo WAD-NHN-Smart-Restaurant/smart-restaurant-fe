@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import api from "@/libs/api-request";
+import { useRouter } from "next/navigation";
 
 // Password strength calculator
 const calculatePasswordStrength = (password: string) => {
@@ -79,6 +80,7 @@ export const RegisterForm = () => {
     label: "",
     color: "#e0e0e0",
   });
+  const router = useRouter();
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -158,6 +160,7 @@ export const RegisterForm = () => {
     }
     await registerUser(data);
     form.reset();
+    router.push("/verify-email?email=" + data.email);
   };
 
   return (

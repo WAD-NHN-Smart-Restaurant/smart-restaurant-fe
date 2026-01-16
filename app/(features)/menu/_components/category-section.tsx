@@ -12,6 +12,13 @@ export function CategorySection({
   category,
   onItemClick,
 }: CategorySectionProps) {
+  // Ensure menuItems is always an array
+  const menuItems = category?.menuItems || [];
+
+  if (menuItems.length === 0) {
+    return null;
+  }
+
   return (
     <section className="mb-8">
       <div className="mb-4">
@@ -22,7 +29,7 @@ export function CategorySection({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 items-start">
-        {category.menuItems.map((item) => (
+        {menuItems.map((item) => (
           <MenuItemCard key={item.id} item={item} onItemClick={onItemClick} />
         ))}
       </div>
