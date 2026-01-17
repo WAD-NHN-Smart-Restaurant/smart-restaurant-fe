@@ -9,6 +9,7 @@ import type {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { getTableInfo } from "@/api/table-api";
+import { useGuestMenuCategoriesQuery } from "./use-guest-menu-categories";
 
 interface MenuFilters {
   search?: string;
@@ -180,7 +181,7 @@ export function GuestMenuPreviewContent() {
     [searchParams, router, pathname, tableId, tableNumber],
   );
 
-  // Memoize query parameters
+  // Memoize query parameters for menu items
   const queryParams: GuestMenuQueryParams = useMemo(
     () => ({
       categoryId: filters.categoryId,
@@ -190,7 +191,25 @@ export function GuestMenuPreviewContent() {
     }),
     [filters.categoryId, tableId],
   );
-  const { data, isLoading, isError } = useGuestMenuQuery(queryParams);
+
+  // Get token from cookie
+  const token = useMemo(() => {
+    return Cookies.get(GUEST_TOKEN_COOKIE);
+  }, []);
+
+  // Fetch menu items
+  const {
+    data: itemsData,
+    isLoading: isItemsLoading,
+    isError: isItemsError,
+  } = useGuestMenuQuery(queryParams);
+
+  // Fetch categories separately
+  const {
+    data: categoriesData,
+    isLoading: isCategoriesLoading,
+    isError: isCategoriesError,
+  } = useGuestMenuCategoriesQuery(token);
 
   const handleItemClick = useCallback(
     (item: GuestMenuItem) => {
@@ -203,24 +222,36 @@ export function GuestMenuPreviewContent() {
     [router, tableId, tableNumber],
   );
 
-  // Get all categories for tabs (unfiltered)
+  // Get all categories (unfiltered)
   const allCategories = useMemo(() => {
-    return data?.data?.items || [];
-  }, [data?.data?.items]);
+    return categoriesData || [];
+  }, [categoriesData]);
 
-  // Get filtered categories and apply client-side filtering and sorting
+  // Build category map with filtered items
   const categories = useMemo(() => {
-    let items = data?.data?.items || [];
+    if (!itemsData?.data?.items || !allCategories.length) {
+      return [];
+    }
+
+    // Data from API is already organized as GuestCategory[] with menuItems
+    const categoriesWithItems = itemsData.data
+      .items as unknown as GuestCategory[];
+
+    // Start with the categories from the menu query (which has items)
+    let result: GuestCategory[] = categoriesWithItems.map((cat) => ({
+      ...cat,
+      menuItems: cat.menuItems || [],
+    }));
 
     // Apply category filter
     if (filters.categoryId) {
-      items = items.filter((cat) => cat.id === filters.categoryId);
+      result = result.filter((cat) => cat.id === filters.categoryId);
     }
 
     // Apply search filter
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      items = items
+      result = result
         .map((category) => ({
           ...category,
           menuItems: category.menuItems.filter(
@@ -234,7 +265,7 @@ export function GuestMenuPreviewContent() {
 
     // Apply chef recommended filter
     if (filters.chefRecommended) {
-      items = items
+      result = result
         .map((category) => ({
           ...category,
           menuItems: category.menuItems.filter(
@@ -246,7 +277,7 @@ export function GuestMenuPreviewContent() {
 
     // Apply popularity sorting (descending - most popular first)
     if (filters.sortByPopularity) {
-      items = items.map((category) => ({
+      result = result.map((category) => ({
         ...category,
         menuItems: [...category.menuItems].sort((a, b) => {
           // Sort by popularity score from backend
@@ -257,8 +288,8 @@ export function GuestMenuPreviewContent() {
       }));
     }
 
-    return items;
-  }, [data?.data?.items, filters]);
+    return result;
+  }, [itemsData, allCategories, filters]);
 
   return (
     <MobileLayout>
@@ -324,7 +355,7 @@ export function GuestMenuPreviewContent() {
         >
           All
         </button>
-        {allCategories.map((category: GuestCategory) => (
+        {allCategories.map((category) => (
           <button
             key={category.id}
             className={`category-tab ${filters.categoryId === category.id ? "active" : ""}`}
@@ -339,7 +370,7 @@ export function GuestMenuPreviewContent() {
 
       {/* Content */}
       <div className="content menu-list" style={{ paddingBottom: "80px" }}>
-        {isError && (
+        {(isItemsError || isCategoriesError) && (
           <Alert variant="destructive" className="mb-6">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -348,100 +379,108 @@ export function GuestMenuPreviewContent() {
           </Alert>
         )}
 
-        {isLoading && <LoadingState />}
+        {(isItemsLoading || isCategoriesLoading) && <LoadingState />}
 
-        {!isLoading && !isError && categories.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">
-              {filters.search
-                ? "No menu items found matching your search."
-                : "No menu items available."}
-            </p>
-          </div>
-        )}
+        {!isItemsLoading &&
+          !isCategoriesLoading &&
+          !isItemsError &&
+          !isCategoriesError &&
+          categories.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500">
+                {filters.search
+                  ? "No menu items found matching your search."
+                  : "No menu items available."}
+              </p>
+            </div>
+          )}
 
-        {!isLoading && !isError && categories.length > 0 && (
-          <>
-            {categories.map((category: GuestCategory) =>
-              category.menuItems.map((item) => {
-                // Get primary photo or first photo
-                const primaryPhoto =
-                  item.menuItemPhotos.find((photo) => photo.isPrimary) ||
-                  item.menuItemPhotos[0];
+        {!isItemsLoading &&
+          !isCategoriesLoading &&
+          !isItemsError &&
+          !isCategoriesError &&
+          categories.length > 0 && (
+            <>
+              {categories.map((category: GuestCategory) =>
+                category.menuItems.map((item) => {
+                  // Get primary photo or first photo
+                  const primaryPhoto =
+                    item.menuItemPhotos.find((photo) => photo.isPrimary) ||
+                    item.menuItemPhotos[0];
 
-                const isAvailable = item.status === "available";
-                return (
-                  <div
-                    key={item.id}
-                    className={`menu-item ${!isAvailable ? "opacity-60 cursor-not-allowed" : ""}`}
-                    onClick={() => isAvailable && handleItemClick(item)}
-                    style={!isAvailable ? { pointerEvents: "none" } : {}}
-                  >
-                    <div className="menu-item-image">
-                      {primaryPhoto?.url ? (
-                        <Image
-                          src={primaryPhoto.url}
-                          alt={item.name}
-                          fill
-                          className="object-cover"
-                          sizes="100px"
-                          unoptimized
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML =
-                                '<span class="text-4xl">🍽️</span>';
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span className="text-4xl">🍽️</span>
-                      )}
-                    </div>
-                    <div className="menu-item-info">
-                      <div>
-                        <div className="menu-item-name">{item.name}</div>
-                        {/* Rating */}
-                        <div className="menu-item-rating">
-                          ☆☆☆☆☆ (0 reviews)
-                        </div>
-                        {/* Status Badge */}
-                        <span
-                          className={`menu-item-status ${item.status === "available" ? "available" : item.status === "sold_out" ? "sold-out" : "unavailable"}`}
-                        >
-                          ●{" "}
-                          {item.status === "available"
-                            ? "Available"
-                            : item.status === "sold_out"
-                              ? "Sold Out"
-                              : "Unavailable"}
-                        </span>
-                      </div>
-                      <div className="menu-item-bottom">
-                        <span className="menu-item-price">
-                          {formatPrice(item.price)}
-                        </span>
-                        {item.status === "available" && (
-                          <button
-                            className="add-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleItemClick(item);
+                  const isAvailable = item.status === "available";
+                  return (
+                    <div
+                      key={item.id}
+                      className={`menu-item ${!isAvailable ? "opacity-60 cursor-not-allowed" : ""}`}
+                      onClick={() => isAvailable && handleItemClick(item)}
+                      style={!isAvailable ? { pointerEvents: "none" } : {}}
+                    >
+                      <div className="menu-item-image">
+                        {primaryPhoto?.url ? (
+                          <Image
+                            src={primaryPhoto.url}
+                            alt={item.name}
+                            fill
+                            className="object-cover"
+                            sizes="100px"
+                            unoptimized
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = "none";
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML =
+                                  '<span class="text-4xl">🍽️</span>';
+                              }
                             }}
-                          >
-                            + Add
-                          </button>
+                          />
+                        ) : (
+                          <span className="text-4xl">🍽️</span>
                         )}
                       </div>
+                      <div className="menu-item-info">
+                        <div>
+                          <div className="menu-item-name">{item.name}</div>
+                          {/* Rating */}
+                          <div className="menu-item-rating">
+                            ☆☆☆☆☆ (0 reviews)
+                          </div>
+                          {/* Status Badge */}
+                          <span
+                            className={`menu-item-status ${item.status === "available" ? "available" : item.status === "sold_out" ? "sold-out" : "unavailable"}`}
+                          >
+                            ●{" "}
+                            {item.status === "available"
+                              ? "Available"
+                              : item.status === "sold_out"
+                                ? "Sold Out"
+                                : "Unavailable"}
+                          </span>
+                        </div>
+                        <div className="menu-item-bottom">
+                          <span className="menu-item-price">
+                            {formatPrice(item.price)}
+                          </span>
+                          {item.status === "available" && (
+                            <button
+                              className="add-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleItemClick(item);
+                              }}
+                            >
+                              + Add
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              }),
-            )}
-          </>
-        )}
+                  );
+                }),
+              )}
+            </>
+          )}
       </div>
     </MobileLayout>
   );

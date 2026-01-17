@@ -7,7 +7,7 @@ const PROTECTED_ROUTES = [
   "/order-history",
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const guestToken = request.cookies.get("guest_menu_token");
   const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;

@@ -17,7 +17,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useCart, CartItem } from "@/context/cart-context";
 import { formatPrice } from "@/utils/format";
-import type { GuestMenuItem } from "@/types/guest-menu-type";
+import type {
+  GuestMenuItem,
+  GuestModifierGroup,
+  GuestModifierOption,
+  GuestMenuItemPhoto,
+  GuestCategory,
+} from "@/types/guest-menu-type";
 import { useGuestMenuQuery } from "../../_contents/use-guest-menu-query";
 import { MobileLayout } from "@/components/mobile-layout";
 import { LoadingState } from "../../_components/loading-state";
@@ -46,9 +52,9 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
 
   const item = useMemo(() => {
     if (!data?.data?.items) return null;
-    for (const category of data.data.items) {
+    for (const category of data.data.items as unknown as GuestCategory[]) {
       const foundItem = category.menuItems.find(
-        (item: GuestMenuItem) => item.id === itemId,
+        (menuItem: GuestMenuItem) => menuItem.id === itemId,
       );
       if (foundItem) return foundItem;
     }
@@ -62,17 +68,19 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
     const basePrice = item.price;
     let modifierTotal = 0;
 
-    item.menuItemModifierGroups.forEach(({ modifierGroups }) => {
-      const selectedOptions = selectedModifiers[modifierGroups.id] || [];
-      selectedOptions.forEach((optionId) => {
-        const option = modifierGroups.modifierOptions.find(
-          (opt) => opt.id === optionId,
-        );
-        if (option) {
-          modifierTotal += option.priceAdjustment;
-        }
-      });
-    });
+    item.menuItemModifierGroups.forEach(
+      ({ modifierGroups }: { modifierGroups: GuestModifierGroup }) => {
+        const selectedOptions = selectedModifiers[modifierGroups.id] || [];
+        selectedOptions.forEach((optionId) => {
+          const option = modifierGroups.modifierOptions.find(
+            (opt: GuestModifierOption) => opt.id === optionId,
+          );
+          if (option) {
+            modifierTotal += option.priceAdjustment;
+          }
+        });
+      },
+    );
 
     return (basePrice + modifierTotal) * quantity;
   }, [item, selectedModifiers, quantity]);
@@ -109,7 +117,9 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
     if (!item) return;
 
     // Validate required modifiers
-    for (const { modifierGroups } of item.menuItemModifierGroups) {
+    for (const { modifierGroups } of item.menuItemModifierGroups as {
+      modifierGroups: GuestModifierGroup;
+    }[]) {
       if (
         modifierGroups.isRequired &&
         !selectedModifiers[modifierGroups.id]?.length
@@ -126,25 +136,28 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
       priceAtTime: number;
     }> = [];
 
-    item.menuItemModifierGroups.forEach(({ modifierGroups }) => {
-      const selectedOptions = selectedModifiers[modifierGroups.id] || [];
-      selectedOptions.forEach((optionId) => {
-        const option = modifierGroups.modifierOptions.find(
-          (opt) => opt.id === optionId,
-        );
-        if (option) {
-          options.push({
-            optionId: option.id,
-            optionName: option.name,
-            priceAtTime: option.priceAdjustment,
-          });
-        }
-      });
-    });
+    item.menuItemModifierGroups.forEach(
+      ({ modifierGroups }: { modifierGroups: GuestModifierGroup }) => {
+        const selectedOptions = selectedModifiers[modifierGroups.id] || [];
+        selectedOptions.forEach((optionId) => {
+          const option = modifierGroups.modifierOptions.find(
+            (opt: GuestModifierOption) => opt.id === optionId,
+          );
+          if (option) {
+            options.push({
+              optionId: option.id,
+              optionName: option.name,
+              priceAtTime: option.priceAdjustment,
+            });
+          }
+        });
+      },
+    );
 
     // Create cart item
     const primaryPhoto =
-      item.menuItemPhotos.find((p) => p.isPrimary) || item.menuItemPhotos[0];
+      item.menuItemPhotos.find((p: GuestMenuItemPhoto) => p.isPrimary) ||
+      item.menuItemPhotos[0];
     const cartItem: CartItem = {
       menuItemId: item.id,
       menuItemName: item.name,
@@ -251,41 +264,46 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
           {/* Photo thumbnails */}
           {photos.length > 1 && (
             <div className="flex gap-2 overflow-x-auto">
-              {photos.map((photo, index) => (
-                <button
-                  key={index}
-                  onClick={() => setCurrentPhotoIndex(index)}
-                  className={`relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0 border-2 ${
-                    index === currentPhotoIndex
-                      ? "border-red-500"
-                      : "border-gray-200"
-                  }`}
-                >
-                  {photo.url ? (
-                    <Image
-                      src={photo.url}
-                      alt={`${item.name} ${index + 1}`}
-                      fill
-                      className="object-cover"
-                      sizes="64px"
-                      unoptimized
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = "none";
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML =
-                            '<div class="absolute inset-0 flex items-center justify-center bg-gray-100">🍽️</div>';
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                      🍽️
-                    </div>
-                  )}
-                </button>
-              ))}
+              {photos.map(
+                (
+                  photo: GuestMenuItemPhoto | { url: null; isPrimary: boolean },
+                  index: number,
+                ) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentPhotoIndex(index)}
+                    className={`relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0 border-2 ${
+                      index === currentPhotoIndex
+                        ? "border-red-500"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    {photo.url ? (
+                      <Image
+                        src={photo.url}
+                        alt={`${item.name} ${index + 1}`}
+                        fill
+                        className="object-cover"
+                        sizes="64px"
+                        unoptimized
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = "none";
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML =
+                              '<div class="absolute inset-0 flex items-center justify-center bg-gray-100">🍽️</div>';
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                        🍽️
+                      </div>
+                    )}
+                  </button>
+                ),
+              )}
             </div>
           )}
         </div>
@@ -324,76 +342,81 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
         {item.menuItemModifierGroups.length > 0 && (
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">Options</h3>
-            {item.menuItemModifierGroups.map(({ modifierGroups }) => {
-              if (modifierGroups.status !== "active") return null;
+            {item.menuItemModifierGroups.map(
+              ({ modifierGroups }: { modifierGroups: GuestModifierGroup }) => {
+                if (modifierGroups.status !== "active") return null;
 
-              return (
-                <Card key={modifierGroups.id}>
-                  <CardContent className="p-4">
-                    <div className="mb-3">
-                      <h4 className="font-medium flex items-center gap-2">
-                        {modifierGroups.name}
-                        {modifierGroups.isRequired && (
-                          <Badge variant="outline" className="text-xs">
-                            Required
-                          </Badge>
-                        )}
-                      </h4>
-                      <p className="text-xs text-gray-500">
-                        {modifierGroups.selectionType === "single"
-                          ? `Select up to ${modifierGroups.maxSelections}`
-                          : `Select up to ${modifierGroups.maxSelections}`}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      {modifierGroups.modifierOptions
-                        .filter((option) => option.status === "active")
-                        .map((option) => {
-                          const isSelected = (
-                            selectedModifiers[modifierGroups.id] || []
-                          ).includes(option.id);
-                          return (
-                            <label
-                              key={option.id}
-                              className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                            >
-                              <div className="flex items-center gap-3">
-                                <input
-                                  type={
-                                    modifierGroups.selectionType === "single"
-                                      ? "radio"
-                                      : "checkbox"
-                                  }
-                                  name={
-                                    modifierGroups.selectionType === "single"
-                                      ? modifierGroups.id
-                                      : undefined
-                                  }
-                                  checked={isSelected}
-                                  onChange={() =>
-                                    handleModifierChange(
-                                      modifierGroups.id,
-                                      option.id,
-                                      modifierGroups.selectionType,
-                                    )
-                                  }
-                                  className="w-4 h-4"
-                                />
-                                <span className="text-sm">{option.name}</span>
-                              </div>
-                              {option.priceAdjustment !== 0 && (
-                                <span className="text-sm font-medium text-green-600">
-                                  +{formatPrice(option.priceAdjustment)}
-                                </span>
-                              )}
-                            </label>
-                          );
-                        })}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                return (
+                  <Card key={modifierGroups.id}>
+                    <CardContent className="p-4">
+                      <div className="mb-3">
+                        <h4 className="font-medium flex items-center gap-2">
+                          {modifierGroups.name}
+                          {modifierGroups.isRequired && (
+                            <Badge variant="outline" className="text-xs">
+                              Required
+                            </Badge>
+                          )}
+                        </h4>
+                        <p className="text-xs text-gray-500">
+                          {modifierGroups.selectionType === "single"
+                            ? `Select up to ${modifierGroups.maxSelections}`
+                            : `Select up to ${modifierGroups.maxSelections}`}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {modifierGroups.modifierOptions
+                          .filter(
+                            (option: GuestModifierOption) =>
+                              option.status === "active",
+                          )
+                          .map((option: GuestModifierOption) => {
+                            const isSelected = (
+                              selectedModifiers[modifierGroups.id] || []
+                            ).includes(option.id);
+                            return (
+                              <label
+                                key={option.id}
+                                className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type={
+                                      modifierGroups.selectionType === "single"
+                                        ? "radio"
+                                        : "checkbox"
+                                    }
+                                    name={
+                                      modifierGroups.selectionType === "single"
+                                        ? modifierGroups.id
+                                        : undefined
+                                    }
+                                    checked={isSelected}
+                                    onChange={() =>
+                                      handleModifierChange(
+                                        modifierGroups.id,
+                                        option.id,
+                                        modifierGroups.selectionType,
+                                      )
+                                    }
+                                    className="w-4 h-4"
+                                  />
+                                  <span className="text-sm">{option.name}</span>
+                                </div>
+                                {option.priceAdjustment !== 0 && (
+                                  <span className="text-sm font-medium text-green-600">
+                                    +{formatPrice(option.priceAdjustment)}
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              },
+            )}
           </div>
         )}
 
