@@ -22,7 +22,6 @@ import type {
   GuestModifierGroup,
   GuestModifierOption,
   GuestMenuItemPhoto,
-  GuestCategory,
 } from "@/types/guest-menu-type";
 import { useGuestMenuQuery } from "../../_contents/use-guest-menu-query";
 import { MobileLayout } from "@/components/mobile-layout";
@@ -52,13 +51,9 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
 
   const item = useMemo(() => {
     if (!data?.data?.items) return null;
-    for (const category of data.data.items as unknown as GuestCategory[]) {
-      const foundItem = category.menuItems.find(
-        (menuItem: GuestMenuItem) => menuItem.id === itemId,
-      );
-      if (foundItem) return foundItem;
-    }
-    return null;
+    // Backend returns flat array of menu items, not grouped by categories
+    const items = data.data.items as GuestMenuItem[];
+    return items.find((menuItem) => menuItem.id === itemId) || null;
   }, [data, itemId]);
 
   // Calculate total price with modifiers

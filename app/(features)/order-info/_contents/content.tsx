@@ -532,56 +532,46 @@ export function OrderInfoContent() {
         const response = await getCurrentOrder();
         // Response has structure: {success, data: {status, data: RawOrder}}
         if (response?.success && response.data?.status) {
-          const raw = response.data.data as RawOrder;
-          const mappedItems = (raw.order_items || []).map(
-            (it: {
-              id: string;
-              menu_item_id: string;
-              menu_item_name?: string | null;
-              quantity: number;
-              unit_price: number;
-              special_request?: string | null;
-              status: string;
-              order_item_options?: Array<{
-                id: string;
-                option_name?: string | null;
-                price_at_time: number;
-              }>;
-            }) => ({
-              id: it.id,
-              menuItemId: it.menu_item_id,
-              menuItemName: it.menu_item_name || undefined,
-              quantity: it.quantity,
-              unitPrice: it.unit_price,
-              specialRequest: it.special_request || undefined,
-              status: it.status,
-              options: (it.order_item_options || []).map(
-                (op: {
-                  id: string;
-                  option_name?: string | null;
-                  price_at_time: number;
-                }) => ({
-                  id: op.id,
-                  optionName: op.option_name || undefined,
-                  priceAtTime: op.price_at_time,
-                }),
-              ),
-            }),
-          );
+          const raw = response.data.data as any; // Backend may return camelCase or snake_case
+
+          // Handle both camelCase (new) and snake_case (old) responses
+          const orderItems = raw.orderItems || raw.order_items || [];
+
+          const mappedItems = orderItems.map((it: any) => ({
+            id: it.id,
+            menuItemId: it.menuItemId || it.menu_item_id,
+            menuItemName: it.menuItemName || it.menu_item_name || undefined,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice || it.unit_price,
+            specialRequest:
+              it.notes || it.specialRequest || it.special_request || undefined,
+            status: it.status,
+            options: (it.orderItemOptions || it.order_item_options || []).map(
+              (op: any) => ({
+                id: op.id,
+                optionName: op.optionName || op.option_name || undefined,
+                priceAtTime: op.priceAtTime || op.price_at_time,
+              }),
+            ),
+          }));
 
           const mapped: Order = {
             id: raw.id,
-            tableId: raw.table_id,
+            tableId: raw.tableId || raw.table_id,
             status: raw.status,
-            guestName: raw.guest_name || undefined,
-            notes: raw.notes || undefined,
-            createdAt: raw.created_at,
+            guestName: raw.guestName || raw.guest_name || undefined,
+            notes:
+              raw.notes ||
+              raw.specialRequest ||
+              raw.special_request ||
+              undefined,
+            createdAt: raw.createdAt || raw.created_at,
             orderItems: mappedItems,
-            // Prefer backend total_amount when provided, otherwise compute locally
+            // Prefer backend total_amount/totalAmount when provided, otherwise compute locally
             totalAmount:
-              raw.total_amount != null
-                ? raw.total_amount
-                : computeOrderTotals(mappedItems),
+              raw.totalAmount ??
+              raw.total_amount ??
+              computeOrderTotals(mappedItems),
           };
           setOrder(mapped);
         } else {

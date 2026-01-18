@@ -9,31 +9,34 @@ const PROTECTED_ROUTES = [
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const guestToken = request.cookies.get("guest_menu_token");
-  const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+  // TODO: Remove fallback env token for server-side in production
+  const guestToken =
+    request.cookies.get("guest_menu_token") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+  console.log("Guest Token in Middleware:", guestToken);
+  //const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
 
   // Development mode: Auto-inject test token for guest routes
-  if (
-    process.env.NODE_ENV === "development" &&
-    PROTECTED_ROUTES.some((route) => pathname.startsWith(route)) &&
-    !guestToken &&
-    testToken
-  ) {
-    const response = NextResponse.next();
-    response.cookies.set({
-      name: "guest_menu_token",
-      value: testToken,
-      httpOnly: false, // Allow JavaScript to read it
-      secure: false, // Allow in development
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 hours
-    });
-    return response;
-  }
+  // if (
+  //   process.env.NODE_ENV === "development" &&
+  //   PROTECTED_ROUTES.some((route) => pathname.startsWith(route)) &&
+  //   !guestToken &&
+  //   testToken
+  // ) {
+  //   const response = NextResponse.next();
+  //   response.cookies.set({
+  //     name: "guest_menu_token",
+  //     value: testToken,
+  //     httpOnly: false, // Allow JavaScript to read it
+  //     secure: false, // Allow in development
+  //     sameSite: "lax",
+  //     maxAge: 60 * 60 * 24, // 24 hours
+  //   });
+  //   return response;
+  // }
 
   // Production mode: Redirect to login if accessing protected route without token
   if (
-    process.env.NODE_ENV === "production" &&
     PROTECTED_ROUTES.some((route) => pathname.startsWith(route)) &&
     !guestToken
   ) {

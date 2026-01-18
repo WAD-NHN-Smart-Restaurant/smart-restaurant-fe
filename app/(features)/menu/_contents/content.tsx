@@ -2,26 +2,12 @@
 
 import { useCallback, useMemo, useEffect, useState } from "react";
 import type {
-  GuestCategory,
   GuestMenuItem,
   GuestMenuQueryParams,
 } from "@/types/guest-menu-type";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
-import { getTableInfo } from "@/api/table-api";
 import { useGuestMenuCategoriesQuery } from "./use-guest-menu-categories";
-
-interface MenuFilters {
-  search?: string;
-  categoryId?: string;
-  sortByPopularity?: boolean;
-  chefRecommended?: boolean;
-}
-
-// Extended type for menu items with popularity score from backend
-interface GuestMenuItemWithPopularity extends GuestMenuItem {
-  popularity?: number;
-}
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useGuestMenuQuery } from "./use-guest-menu-query";
 import { LoadingState } from "../_components/loading-state";
@@ -31,16 +17,41 @@ import { formatPrice } from "@/utils/format";
 import Cookies from "js-cookie";
 import Image from "next/image";
 
+interface MenuFilters {
+  search?: string;
+  categoryId?: string;
+  sortBy?: "name" | "price" | "popularity";
+  sortOrder?: "asc" | "desc";
+  chefRecommended?: boolean;
+}
+
 const GUEST_TOKEN_COOKIE = "guest_menu_token";
 
 export function GuestMenuPreviewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const tokenFromUrl = searchParams.get("token") || undefined;
-  const tableId = searchParams.get("table") || undefined;
-  const tableNumberFromUrl = searchParams.get("tableNumber") || undefined;
+  const tokenFromUrl =
+    searchParams.get("token") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN ||
+    undefined;
+  const tableIdFromUrl =
+    searchParams.get("table") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_ID ||
+    undefined;
+  const tableNumberFromUrl =
+    searchParams.get("tableNumber") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_NUMBER ||
+    undefined;
 
+  const [tableId] = useState<string | undefined>(() => {
+    if (typeof window !== "undefined") {
+      return (
+        tableIdFromUrl || localStorage.getItem("guest_table_id") || undefined
+      );
+    }
+    return tableIdFromUrl;
+  });
   // State to trigger re-render when localStorage is updated
   const [tableNumber, setTableNumber] = useState<string | undefined>(() => {
     // Initialize from localStorage on first render
@@ -53,71 +64,26 @@ export function GuestMenuPreviewContent() {
   // Handle token management on mount
   useEffect(() => {
     const handleTokenManagement = async () => {
-      let tokenToUse = tokenFromUrl;
-
-      // For local testing: use test token from env if no URL token
-      if (!tokenToUse && process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN) {
-        tokenToUse = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
-        console.log("Using test token from environment");
-      }
-
-      if (tokenToUse) {
+      if (tokenFromUrl) {
         const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
 
         // Save or update token in cookie if it's different
-        if (!existingToken || existingToken !== tokenToUse) {
-          Cookies.set(GUEST_TOKEN_COOKIE, tokenToUse, {
+        if (!existingToken || existingToken !== tokenFromUrl) {
+          Cookies.set(GUEST_TOKEN_COOKIE, tokenFromUrl, {
             expires: 7, // Cookie expires in 7 days
             sameSite: "lax",
           });
         }
 
-        // Decode JWT to get tableId and tableNumber, save to localStorage
-        try {
-          const payload = JSON.parse(atob(tokenToUse.split(".")[1]));
-          console.log("JWT Payload:", payload); // Debug: see full payload
-
-          if (payload.tableId) {
-            localStorage.setItem("guest_table_id", payload.tableId);
-            console.log("Saved tableId to localStorage:", payload.tableId);
-          }
-
-          // Handle table number: use from JWT if available, otherwise fetch from backend
-          if (payload.tableNumber) {
-            localStorage.setItem(
-              "guest_table_number",
-              String(payload.tableNumber),
-            );
-            setTableNumber(String(payload.tableNumber));
-            console.log(
-              "Saved tableNumber from JWT to localStorage:",
-              payload.tableNumber,
-            );
-          } else if (payload.tableId) {
-            // Fetch table info from backend to get table_number
-            try {
-              const tableInfo = await getTableInfo(payload.tableId);
-              if (tableInfo.table_number) {
-                localStorage.setItem(
-                  "guest_table_number",
-                  String(tableInfo.table_number),
-                );
-                setTableNumber(String(tableInfo.table_number));
-                console.log(
-                  "Fetched and saved tableNumber from backend:",
-                  tableInfo.table_number,
-                );
-              }
-            } catch (error) {
-              console.error("Failed to fetch table info:", error);
-            }
-          }
-        } catch (error) {
-          console.error("Failed to decode token:", error);
+        if (tableId) {
+          localStorage.setItem("guest_table_id", tableId);
+          console.log("Saved tableId from URL to localStorage:", tableId);
         }
+        if (tableNumberFromUrl) {
+          localStorage.setItem("guest_table_number", tableNumberFromUrl);
+          setTableNumber(tableNumberFromUrl);
 
-        // Remove token from URL (only if it came from URL)
-        if (tokenFromUrl) {
+          //Remove token from URL (only if it came from URL)
           const params = new URLSearchParams(searchParams.toString());
           params.delete("token");
 
@@ -128,20 +94,11 @@ export function GuestMenuPreviewContent() {
           router.replace(newUrl, { scroll: false });
         }
       }
-
-      // Save tableNumber from URL to localStorage (always prioritize URL param)
-      if (tableNumberFromUrl) {
-        localStorage.setItem("guest_table_number", tableNumberFromUrl);
-        setTableNumber(tableNumberFromUrl);
-        console.log(
-          "Saved tableNumber from URL to localStorage:",
-          tableNumberFromUrl,
-        );
-      }
     };
 
     handleTokenManagement();
-  }, [tokenFromUrl, tableNumberFromUrl, searchParams, pathname, router]);
+    // }, [tokenFromUrl, tableNumberFromUrl, searchParams, pathname, router]);
+  }, [tokenFromUrl, router]);
 
   // Token is persisted in cookie above when present in URL
 
@@ -150,8 +107,10 @@ export function GuestMenuPreviewContent() {
     () => ({
       search: searchParams.get("search") || undefined,
       categoryId: searchParams.get("categoryId") || undefined,
-      sortByPopularity:
-        searchParams.get("sortByPopularity") === "true" || undefined,
+      sortBy:
+        (searchParams.get("sortBy") as "name" | "price" | "popularity") ||
+        undefined,
+      sortOrder: (searchParams.get("sortOrder") as "asc" | "desc") || undefined,
       chefRecommended:
         searchParams.get("chefRecommended") === "true" || undefined,
     }),
@@ -184,18 +143,27 @@ export function GuestMenuPreviewContent() {
   // Memoize query parameters for menu items
   const queryParams: GuestMenuQueryParams = useMemo(
     () => ({
+      search: filters.search,
       categoryId: filters.categoryId,
+      chefRecommended: filters.chefRecommended,
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
       page: 1,
       limit: 100, // Get all items for preview
       table: tableId,
     }),
-    [filters.categoryId, tableId],
+    [
+      filters.search,
+      filters.categoryId,
+      filters.chefRecommended,
+      filters.sortBy,
+      filters.sortOrder,
+      tableId,
+    ],
   );
 
   // Get token from cookie
-  const token = useMemo(() => {
-    return Cookies.get(GUEST_TOKEN_COOKIE);
-  }, []);
+  const token = Cookies.get(GUEST_TOKEN_COOKIE);
 
   // Fetch menu items
   const {
@@ -227,69 +195,14 @@ export function GuestMenuPreviewContent() {
     return categoriesData || [];
   }, [categoriesData]);
 
-  // Build category map with filtered items
-  const categories = useMemo(() => {
-    if (!itemsData?.data?.items || !allCategories.length) {
+  // Get menu items from backend - already filtered and sorted
+  const menuItems = useMemo(() => {
+    if (!itemsData?.data?.items) {
       return [];
     }
-
-    // Data from API is already organized as GuestCategory[] with menuItems
-    const categoriesWithItems = itemsData.data
-      .items as unknown as GuestCategory[];
-
-    // Start with the categories from the menu query (which has items)
-    let result: GuestCategory[] = categoriesWithItems.map((cat) => ({
-      ...cat,
-      menuItems: cat.menuItems || [],
-    }));
-
-    // Apply category filter
-    if (filters.categoryId) {
-      result = result.filter((cat) => cat.id === filters.categoryId);
-    }
-
-    // Apply search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result
-        .map((category) => ({
-          ...category,
-          menuItems: category.menuItems.filter(
-            (item) =>
-              item.name.toLowerCase().includes(searchLower) ||
-              item.description?.toLowerCase().includes(searchLower),
-          ),
-        }))
-        .filter((category) => category.menuItems.length > 0);
-    }
-
-    // Apply chef recommended filter
-    if (filters.chefRecommended) {
-      result = result
-        .map((category) => ({
-          ...category,
-          menuItems: category.menuItems.filter(
-            (item) => item.isChefRecommended,
-          ),
-        }))
-        .filter((category) => category.menuItems.length > 0);
-    }
-
-    // Apply popularity sorting (descending - most popular first)
-    if (filters.sortByPopularity) {
-      result = result.map((category) => ({
-        ...category,
-        menuItems: [...category.menuItems].sort((a, b) => {
-          // Sort by popularity score from backend
-          const aScore = (a as GuestMenuItemWithPopularity).popularity || 0;
-          const bScore = (b as GuestMenuItemWithPopularity).popularity || 0;
-          return bScore - aScore;
-        }),
-      }));
-    }
-
-    return result;
-  }, [itemsData, allCategories, filters]);
+    // Backend returns flat array of menu items, already filtered and sorted
+    return itemsData.data.items;
+  }, [itemsData]);
 
   return (
     <MobileLayout>
@@ -331,17 +244,39 @@ export function GuestMenuPreviewContent() {
           </button>
           <select
             className="px-3 py-1.5 rounded-full text-sm border border-gray-300 bg-white"
-            value={filters.sortByPopularity ? "popularity" : ""}
+            value={filters.sortBy || ""}
             onChange={(e) => {
+              const newSortBy = e.target.value as
+                | "name"
+                | "price"
+                | "popularity"
+                | "";
               handleFiltersChange({
                 ...filters,
-                sortByPopularity: e.target.value === "popularity" || undefined,
+                sortBy: newSortBy || undefined,
+                // Reset sortOrder if clearing sortBy
+                sortOrder: newSortBy ? filters.sortOrder || "asc" : undefined,
               });
             }}
           >
             <option value="">Sort by</option>
-            <option value="popularity">Most Popular</option>
+            <option value="name">Name</option>
+            <option value="price">Price</option>
+            <option value="popularity">Popularity</option>
           </select>
+          {filters.sortBy && (
+            <button
+              className="px-3 py-1.5 rounded-full text-sm border border-gray-300 bg-white whitespace-nowrap"
+              onClick={() =>
+                handleFiltersChange({
+                  ...filters,
+                  sortOrder: filters.sortOrder === "asc" ? "desc" : "asc",
+                })
+              }
+            >
+              {filters.sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -385,7 +320,7 @@ export function GuestMenuPreviewContent() {
           !isCategoriesLoading &&
           !isItemsError &&
           !isCategoriesError &&
-          categories.length === 0 && (
+          menuItems.length === 0 && (
             <div className="text-center py-12">
               <p className="text-gray-500">
                 {filters.search
@@ -399,86 +334,84 @@ export function GuestMenuPreviewContent() {
           !isCategoriesLoading &&
           !isItemsError &&
           !isCategoriesError &&
-          categories.length > 0 && (
+          menuItems.length > 0 && (
             <>
-              {categories.map((category: GuestCategory) =>
-                category.menuItems.map((item) => {
-                  // Get primary photo or first photo
-                  const primaryPhoto =
-                    item.menuItemPhotos.find((photo) => photo.isPrimary) ||
-                    item.menuItemPhotos[0];
+              {menuItems.map((item) => {
+                // Get primary photo or first photo
+                const primaryPhoto =
+                  item.menuItemPhotos.find((photo) => photo.isPrimary) ||
+                  item.menuItemPhotos[0];
 
-                  const isAvailable = item.status === "available";
-                  return (
-                    <div
-                      key={item.id}
-                      className={`menu-item ${!isAvailable ? "opacity-60 cursor-not-allowed" : ""}`}
-                      onClick={() => isAvailable && handleItemClick(item)}
-                      style={!isAvailable ? { pointerEvents: "none" } : {}}
-                    >
-                      <div className="menu-item-image">
-                        {primaryPhoto?.url ? (
-                          <Image
-                            src={primaryPhoto.url}
-                            alt={item.name}
-                            fill
-                            className="object-cover"
-                            sizes="100px"
-                            unoptimized
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = "none";
-                              const parent = target.parentElement;
-                              if (parent) {
-                                parent.innerHTML =
-                                  '<span class="text-4xl">🍽️</span>';
-                              }
+                const isAvailable = item.status === "available";
+                return (
+                  <div
+                    key={item.id}
+                    className={`menu-item ${!isAvailable ? "opacity-60 cursor-not-allowed" : ""}`}
+                    onClick={() => isAvailable && handleItemClick(item)}
+                    style={!isAvailable ? { pointerEvents: "none" } : {}}
+                  >
+                    <div className="menu-item-image">
+                      {primaryPhoto?.url ? (
+                        <Image
+                          src={primaryPhoto.url}
+                          alt={item.name}
+                          fill
+                          className="object-cover"
+                          sizes="100px"
+                          unoptimized
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML =
+                                '<span class="text-4xl">🍽️</span>';
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="text-4xl">🍽️</span>
+                      )}
+                    </div>
+                    <div className="menu-item-info">
+                      <div>
+                        <div className="menu-item-name">{item.name}</div>
+                        {/* Rating */}
+                        <div className="menu-item-rating">
+                          ☆☆☆☆☆ (0 reviews)
+                        </div>
+                        {/* Status Badge */}
+                        <span
+                          className={`menu-item-status ${item.status === "available" ? "available" : item.status === "sold_out" ? "sold-out" : "unavailable"}`}
+                        >
+                          ●{" "}
+                          {item.status === "available"
+                            ? "Available"
+                            : item.status === "sold_out"
+                              ? "Sold Out"
+                              : "Unavailable"}
+                        </span>
+                      </div>
+                      <div className="menu-item-bottom">
+                        <span className="menu-item-price">
+                          {formatPrice(item.price)}
+                        </span>
+                        {item.status === "available" && (
+                          <button
+                            className="add-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleItemClick(item);
                             }}
-                          />
-                        ) : (
-                          <span className="text-4xl">🍽️</span>
+                          >
+                            + Add
+                          </button>
                         )}
                       </div>
-                      <div className="menu-item-info">
-                        <div>
-                          <div className="menu-item-name">{item.name}</div>
-                          {/* Rating */}
-                          <div className="menu-item-rating">
-                            ☆☆☆☆☆ (0 reviews)
-                          </div>
-                          {/* Status Badge */}
-                          <span
-                            className={`menu-item-status ${item.status === "available" ? "available" : item.status === "sold_out" ? "sold-out" : "unavailable"}`}
-                          >
-                            ●{" "}
-                            {item.status === "available"
-                              ? "Available"
-                              : item.status === "sold_out"
-                                ? "Sold Out"
-                                : "Unavailable"}
-                          </span>
-                        </div>
-                        <div className="menu-item-bottom">
-                          <span className="menu-item-price">
-                            {formatPrice(item.price)}
-                          </span>
-                          {item.status === "available" && (
-                            <button
-                              className="add-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleItemClick(item);
-                              }}
-                            >
-                              + Add
-                            </button>
-                          )}
-                        </div>
-                      </div>
                     </div>
-                  );
-                }),
-              )}
+                  </div>
+                );
+              })}
             </>
           )}
       </div>

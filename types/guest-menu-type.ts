@@ -49,6 +49,8 @@ export interface GuestMenuItem {
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+  popularity?: number;
+  categoryName?: string;
   menuItemPhotos: GuestMenuItemPhoto[];
   menuItemModifierGroups: GuestMenuItemModifierGroup[];
 }
@@ -70,6 +72,9 @@ export interface GuestMenuQueryParams {
   table?: string;
   search?: string;
   categoryId?: string;
+  chefRecommended?: boolean;
+  sortBy?: "name" | "price" | "popularity";
+  sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
 }

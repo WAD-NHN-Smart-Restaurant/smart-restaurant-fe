@@ -35,7 +35,6 @@ export function CheckoutContent() {
         <MobileHeader
           title="Your Cart"
           tableNumber={tableNumber || undefined}
-          showBack
         />
         <div
           className="content"
@@ -116,11 +115,7 @@ export function CheckoutContent() {
 
   return (
     <MobileLayout>
-      <MobileHeader
-        title="Your Cart"
-        tableNumber={tableNumber || undefined}
-        showBack
-      />
+      <MobileHeader title="Your Cart" tableNumber={tableNumber || undefined} />
 
       {/* Cart Content */}
       <div className="content" style={{ paddingBottom: "250px" }}>

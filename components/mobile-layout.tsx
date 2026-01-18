@@ -13,7 +13,7 @@ export function MobileLayout({
   showBottomNav = true,
 }: MobileLayoutProps) {
   return (
-    <div className="mobile-container">
+    <div>
       {children}
       {showBottomNav && <BottomNav />}
     </div>

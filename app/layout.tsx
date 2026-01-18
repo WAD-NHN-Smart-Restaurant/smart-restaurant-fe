@@ -31,9 +31,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <DevTokenInjector />
-          <div className="app-wrapper">
-            <main className="mobile-container">{children}</main>
+          {/* <DevTokenInjector /> */}
+          <div>
+            <main>{children}</main>
           </div>
         </Providers>
       </body>

@@ -1,32 +1,25 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface MobileHeaderProps {
   title: string;
   tableNumber?: string;
-  showBack?: boolean;
 }
 
-export function MobileHeader({
-  title,
-  tableNumber,
-  showBack,
-}: MobileHeaderProps) {
+export function MobileHeader({ title, tableNumber }: MobileHeaderProps) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="header" suppressHydrationWarning>
-      {showBack ? (
-        <button onClick={() => router.back()} className="header-back">
-          <ArrowLeft size={24} />
-        </button>
-      ) : (
-        <span style={{ fontSize: "24px" }}>☰</span>
-      )}
       <span className="header-title">{title}</span>
-      {tableNumber && (
+      {mounted && tableNumber && (
         <span className="header-table" suppressHydrationWarning>
           Table {tableNumber}
         </span>
