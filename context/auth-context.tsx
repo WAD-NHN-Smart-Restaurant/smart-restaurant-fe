@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  ReactNode,
+  useState,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSafeQuery } from "@/hooks/use-safe-query";
@@ -16,6 +22,7 @@ import { tokenManager } from "@/libs/api-request";
 import { createClient } from "@/libs/supabase/client";
 import { AUTH_PATHS, PATHS } from "@/data/path";
 import { LoginFormData, RegisterFormData, User } from "@/types/auth-type";
+import { AuthRequiredModal } from "@/components/auth-required-modal";
 
 // Auth context type
 interface AuthContextType {
@@ -33,7 +40,9 @@ interface AuthContextType {
 }
 
 // Create context
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(
+  undefined,
+);
 
 // Query keys
 const AUTH_QUERY_KEYS = {
@@ -46,54 +55,30 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const GUEST_ROUTES = [PATHS.MENU.INDEX, "/checkout", "/order-info"];
+
+const AUTH_ROUTES = [
+  AUTH_PATHS.LOGIN,
+  AUTH_PATHS.REGISTER,
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/callback",
+];
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const supabase = createClient(); // Create client inside component
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   console.log("AuthProvider mounting, pathname:", pathname);
-
-  // Public routes that don't need authentication checks
-  const publicRoutes = [
-    "/login",
-    "/login-google/callback",
-    "/register",
-    "/forgot-password",
-    "/verify-email",
-    "/reset-password",
-    "/callback",
-    "/",
-  ];
-  const isPublicRoute = publicRoutes.some(
-    (route) => pathname === route || pathname?.startsWith(route + "/"),
-  );
-
-  // Check if we're in a token exchange flow (has auth tokens in URL)
-  const hasAuthTokenInUrl =
-    typeof window !== "undefined" &&
-    (window.location.hash.includes("access_token") ||
-      window.location.search.includes("access_token"));
-
-  // Also check if pathname is a recovery/callback route
-  const isRecoveryRoute =
-    pathname?.includes("/reset-password") || pathname?.includes("/callback");
-
-  // Skip auth checks if there's a token exchange in progress or on recovery routes
-  const shouldSkipAuthCheck =
-    isPublicRoute || hasAuthTokenInUrl || isRecoveryRoute;
-  console.log("Auth Context Debug:", {
-    pathname,
-    isPublicRoute,
-    hasAuthTokenInUrl,
-    isRecoveryRoute,
-    shouldSkipAuthCheck,
-  });
 
   // Check authentication status (skip for public routes)
   const { data: isAuthenticated = false, isLoading: isAuthLoading } =
     useSafeQuery(AUTH_QUERY_KEYS.status, checkAuthStatus, {
-      enabled: !shouldSkipAuthCheck, // Skip if token exchange in progress
+      enabled: true, // Skip if token exchange in progress
       staleTime: 5 * 60 * 1000, // 5 minutes
       retry: false,
       hideErrorSnackbar: true, // Silent auth check
@@ -105,23 +90,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const hasHashFragment =
       typeof window !== "undefined" && window.location.hash.length > 0;
 
+    // Don't show modal on auth pages or guest-allowed routes
+    const isAuthPage = AUTH_ROUTES.some((route) => pathname?.startsWith(route));
+    const isGuestRoute = GUEST_ROUTES.some((route) =>
+      pathname?.startsWith(route),
+    );
+
     if (
-      !shouldSkipAuthCheck &&
       !isAuthLoading &&
       !isAuthenticated &&
-      !hasHashFragment
+      !hasHashFragment &&
+      !isAuthPage && // Don't show modal on auth pages
+      !isGuestRoute // Don't show modal on guest routes
     ) {
-      console.log("User not authenticated, redirecting to login");
-      router.push(AUTH_PATHS.LOGIN);
+      console.log("User not authenticated, showing auth modal");
+      setShowAuthModal(true);
+    } else if (isAuthPage || isGuestRoute) {
+      // Close modal if user navigates to auth or guest pages
+      setShowAuthModal(false);
     }
-  }, [shouldSkipAuthCheck, isAuthLoading, isAuthenticated, router]);
+  }, [isAuthLoading, isAuthenticated, pathname]);
 
   // Get current user (skip for public routes)
   const { data: user = null, isLoading: isUserLoading } = useSafeQuery(
     AUTH_QUERY_KEYS.user,
     getCurrentUser,
     {
-      enabled: !shouldSkipAuthCheck && isAuthenticated, // Only fetch user on non-public routes when authenticated
+      enabled: isAuthenticated, // Only fetch user when authenticated
       staleTime: 10 * 60 * 1000, // 10 minutes
       retry: false,
       hideErrorSnackbar: true, // Silent user fetch
@@ -290,7 +285,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+    <>
+      <AuthContext.Provider value={contextValue}>
+        {children}
+      </AuthContext.Provider>
+      <AuthRequiredModal open={showAuthModal} onOpenChange={setShowAuthModal} />
+    </>
   );
 };
 
