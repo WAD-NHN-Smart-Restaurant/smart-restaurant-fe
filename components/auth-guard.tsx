@@ -114,9 +114,17 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  if (isLoading || isAuthenticated) {
+  // Show loading while checking authentication status
+  if (isLoading) {
     return <LoadingSpinner />;
   }
 
+  // If user is authenticated, don't show the auth page content
+  // (they will be redirected by useEffect)
+  if (isAuthenticated) {
+    return <LoadingSpinner />;
+  }
+
+  // Show the auth page for non-authenticated users
   return <>{children}</>;
 };

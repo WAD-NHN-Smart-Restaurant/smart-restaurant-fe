@@ -1,17 +1,17 @@
 import { Metadata } from "next";
-import { GuestMenuPreviewContent } from "./_contents/content";
+import { OrderInfoContent } from "./_contents/content";
 import { Suspense } from "react";
 import { PageLoadingSkeleton } from "@/components/page-loading-skeleton";
 
 export const metadata: Metadata = {
-  title: "Menu | Smart Restaurant",
-  description: "Preview how your menu appears to guests",
+  title: "Order Status | Smart Restaurant",
+  description: "View your order status",
 };
 
-export default function GuestMenuPage() {
+export default function OrderInfoPage() {
   return (
     <Suspense fallback={<PageLoadingSkeleton />}>
-      <GuestMenuPreviewContent />
+      <OrderInfoContent />
     </Suspense>
   );
 }

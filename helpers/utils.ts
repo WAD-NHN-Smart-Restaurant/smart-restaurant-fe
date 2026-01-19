@@ -33,10 +33,28 @@ export const isPathType = (path: string, type: PathType): boolean => {
       );
     }
 
-    case "public":
-      return Object.values(PUBLIC_PATHS).includes(
-        path as unknown as (typeof PUBLIC_PATHS)[keyof typeof PUBLIC_PATHS],
+    case "public": {
+      // Flatten nested PUBLIC_PATHS structure
+      const allPublicPaths: string[] = [];
+
+      Object.values(PUBLIC_PATHS).forEach((value) => {
+        if (typeof value === "object" && value !== null) {
+          Object.values(value).forEach((nestedValue) => {
+            if (typeof nestedValue === "string") {
+              allPublicPaths.push(nestedValue);
+            }
+          });
+        } else if (typeof value === "string") {
+          allPublicPaths.push(value);
+        }
+      });
+
+      // Check if path matches or starts with any public path
+      return allPublicPaths.some(
+        (publicPath) =>
+          path === publicPath || path.startsWith(publicPath + "/"),
       );
+    }
 
     default:
       return false;

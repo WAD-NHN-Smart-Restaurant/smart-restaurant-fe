@@ -12,23 +12,21 @@ export function LoadingState() {
             <div className="h-4 bg-gray-200 rounded w-96"></div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
             {Array.from({ length: 4 }).map((_, itemIndex) => (
-              <Card
-                key={itemIndex}
-                className="overflow-hidden h-full flex flex-col"
-              >
-                <CardContent className="p-0 flex flex-col h-full">
-                  <div className="w-full h-48 bg-gray-200"></div>
-                  <div className="p-4 flex flex-col flex-1">
+              <Card key={itemIndex} className="overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="aspect-[4/3] bg-gray-200"></div>
+                  <div className="p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div className="h-6 bg-gray-200 rounded w-32"></div>
                       <div className="h-6 bg-gray-200 rounded w-16"></div>
                     </div>
-                    <div className="mb-3 h-5">
+                    <div className="space-y-2">
                       <div className="h-4 bg-gray-200 rounded w-full"></div>
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                     </div>
-                    <div className="flex justify-between items-center mt-auto">
+                    <div className="flex justify-between items-center mt-3">
                       <div className="h-3 bg-gray-200 rounded w-16"></div>
                       <div className="h-3 bg-gray-200 rounded w-24"></div>
                     </div>

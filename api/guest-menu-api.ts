@@ -7,8 +7,8 @@ import type {
 } from "@/types/guest-menu-type";
 
 const GUEST_MENU_API = {
-  GET_MENU: "/api/menu",
-  GET_CATEGORIES: "/api/menu/categories",
+  GET_MENU: "menu",
+  GET_CATEGORIES: "menu/categories",
 };
 
 /**

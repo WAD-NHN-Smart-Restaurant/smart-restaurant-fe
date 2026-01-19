@@ -44,11 +44,13 @@ export interface GuestMenuItem {
   description?: string;
   price: number;
   prepTimeMinutes: number;
-  status: "available" | "unavailable" | "out_of_stock";
+  status: "available" | "unavailable" | "sold_out";
   isChefRecommended: boolean;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+  popularity?: number;
+  categoryName?: string;
   menuItemPhotos: GuestMenuItemPhoto[];
   menuItemModifierGroups: GuestMenuItemModifierGroup[];
   categoryName: string;
@@ -76,6 +78,9 @@ export interface GuestMenuQueryParams {
   sortBy?: "name" | "price" | "popularity";
   sortOrder?: "asc" | "desc";
   categoryId?: string;
+  chefRecommended?: boolean;
+  sortBy?: "name" | "price" | "popularity";
+  sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
 }

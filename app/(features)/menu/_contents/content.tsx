@@ -1,70 +1,106 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect, useState } from "react";
 import type {
-  GuestCategory,
   GuestMenuItem,
   GuestMenuQueryParams,
 } from "@/types/guest-menu-type";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { useGuestMenuCategoriesQuery } from "./use-guest-menu-categories";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import {
-  useGuestMenuQuery,
-  useGuestCategoryMenuQuery,
-} from "./use-guest-menu-query";
+import { useGuestMenuQuery } from "./use-guest-menu-query";
 import { LoadingState } from "../_components/loading-state";
-import { CategorySection } from "../_components/category-section";
-import { MenuItemDetailDialog } from "../_components/menu-item-detail-dialog";
-import { MenuFiltersSection, MenuFilters } from "../_components/menu-filters";
+import { MobileLayout } from "@/components/mobile-layout";
+import { MobileHeader } from "@/components/mobile-header";
+import { formatPrice } from "@/utils/format";
 import Cookies from "js-cookie";
-import { PageLoadingSkeleton } from "@/components/page-loading-skeleton";
+import Image from "next/image";
+
+interface MenuFilters {
+  search?: string;
+  categoryId?: string;
+  sortBy?: "name" | "price" | "popularity";
+  sortOrder?: "asc" | "desc";
+  chefRecommended?: boolean;
+}
 
 const GUEST_TOKEN_COOKIE = "guest_menu_token";
 
 export function GuestMenuPreviewContent() {
-  const [selectedItem, setSelectedItem] = useState<GuestMenuItem | null>(null);
-  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const tokenFromUrl = searchParams.get("token") || undefined;
-  const tableId = searchParams.get("table") || undefined;
-  const [isMounted, setIsMounted] = useState(false);
+  const tokenFromUrl =
+    searchParams.get("token") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN ||
+    undefined;
+  const tableIdFromUrl =
+    searchParams.get("table") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_ID ||
+    undefined;
+  const tableNumberFromUrl =
+    searchParams.get("tableNumber") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_NUMBER ||
+    undefined;
 
-  useEffect(() => {
-    setIsMounted(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [tableId] = useState<string | undefined>(() => {
+    if (typeof window !== "undefined") {
+      return (
+        tableIdFromUrl || localStorage.getItem("guest_table_id") || undefined
+      );
+    }
+    return tableIdFromUrl;
+  });
+  // State to trigger re-render when localStorage is updated
+  const [tableNumber, setTableNumber] = useState<string | undefined>(() => {
+    // Initialize from localStorage on first render
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("guest_table_number") || undefined;
+    }
+    return undefined;
+  });
 
   // Handle token management on mount
   useEffect(() => {
-    if (!isMounted) return;
-    if (tokenFromUrl) {
-      const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
+    const handleTokenManagement = async () => {
+      if (tokenFromUrl) {
+        const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
 
-      // Save or update token in cookie if it's different
-      if (!existingToken || existingToken !== tokenFromUrl) {
-        Cookies.set(GUEST_TOKEN_COOKIE, tokenFromUrl, {
-          expires: 7, // Cookie expires in 7 days
-          sameSite: "lax",
-        });
+        // Save or update token in cookie if it's different
+        if (!existingToken || existingToken !== tokenFromUrl) {
+          Cookies.set(GUEST_TOKEN_COOKIE, tokenFromUrl, {
+            expires: 7, // Cookie expires in 7 days
+            sameSite: "lax",
+          });
+        }
+
+        if (tableId) {
+          localStorage.setItem("guest_table_id", tableId);
+          console.log("Saved tableId from URL to localStorage:", tableId);
+        }
+        if (tableNumberFromUrl) {
+          localStorage.setItem("guest_table_number", tableNumberFromUrl);
+          setTableNumber(tableNumberFromUrl);
+
+          //Remove token from URL (only if it came from URL)
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete("token");
+
+          const newUrl = params.toString()
+            ? `${pathname}?${params.toString()}`
+            : pathname;
+
+          router.replace(newUrl, { scroll: false });
+        }
       }
+    };
 
-      // Remove token from URL
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("token");
+    handleTokenManagement();
+    // }, [tokenFromUrl, tableNumberFromUrl, searchParams, pathname, router]);
+  }, [tokenFromUrl, router]);
 
-      const newUrl = params.toString()
-        ? `${pathname}?${params.toString()}`
-        : pathname;
-
-      router.replace(newUrl, { scroll: false });
-    }
-  }, [isMounted, tokenFromUrl, searchParams, pathname, router]);
-
-  // Get token from cookie if not in URL
-  const token = tokenFromUrl || Cookies.get(GUEST_TOKEN_COOKIE);
+  // Token is persisted in cookie above when present in URL
 
   // Read filters from URL search params
   const filters: MenuFilters = useMemo(
@@ -72,10 +108,9 @@ export function GuestMenuPreviewContent() {
       search: searchParams.get("search") || undefined,
       categoryId: searchParams.get("categoryId") || undefined,
       sortBy:
-        (searchParams.get("sortBy") as MenuFilters["sortBy"]) || undefined,
-      sortOrder:
-        (searchParams.get("sortOrder") as MenuFilters["sortOrder"]) ||
+        (searchParams.get("sortBy") as "name" | "price" | "popularity") ||
         undefined,
+      sortOrder: (searchParams.get("sortOrder") as "asc" | "desc") || undefined,
       chefRecommended:
         searchParams.get("chefRecommended") === "true" || undefined,
     }),
@@ -98,106 +133,194 @@ export function GuestMenuPreviewContent() {
 
       // Preserve token and table params if they exist
       if (tableId) params.set("table", tableId);
+      if (tableNumber) params.set("tableNumber", tableNumber);
 
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [searchParams, router, pathname, tableId],
+    [searchParams, router, pathname, tableId, tableNumber],
   );
 
-  // Memoize query parameters
+  // Memoize query parameters for menu items
   const queryParams: GuestMenuQueryParams = useMemo(
     () => ({
-      token: token || "", // Pass the actual token from cookie/URL
-      categoryId: filters.categoryId,
       search: filters.search,
+      categoryId: filters.categoryId,
+      chefRecommended: filters.chefRecommended,
       sortBy: filters.sortBy,
       sortOrder: filters.sortOrder,
-      chefRecommended: filters.chefRecommended,
       page: 1,
       limit: 100, // Get all items for preview
       table: tableId,
     }),
-    [token, filters, tableId],
+    [
+      filters.search,
+      filters.categoryId,
+      filters.chefRecommended,
+      filters.sortBy,
+      filters.sortOrder,
+      tableId,
+    ],
   );
-  const { data, isLoading, isError } = useGuestMenuQuery(queryParams);
-  const { data: categoriesData } = useGuestCategoryMenuQuery(token || "");
 
-  const handleItemClick = useCallback((item: GuestMenuItem) => {
-    setSelectedItem(item);
-    setIsItemDialogOpen(true);
-  }, []);
+  // Get token from cookie
+  const token = Cookies.get(GUEST_TOKEN_COOKIE);
 
-  const handleCloseItemDialog = useCallback(() => {
-    setIsItemDialogOpen(false);
-    setSelectedItem(null);
-  }, []);
+  // Fetch menu items
+  const {
+    data: itemsData,
+    isLoading: isItemsLoading,
+    isError: isItemsError,
+  } = useGuestMenuQuery(queryParams);
 
-  // Transform menu items into categories (backend handles filtering and sorting)
-  const categories = useMemo(() => {
-    const menuItems = data?.data?.items || [];
+  // Fetch categories separately
+  const {
+    data: categoriesData,
+    isLoading: isCategoriesLoading,
+    isError: isCategoriesError,
+  } = useGuestMenuCategoriesQuery(token);
 
-    // Group menu items by category
-    const categoriesMap = new Map<string, GuestCategory>();
+  const handleItemClick = useCallback(
+    (item: GuestMenuItem) => {
+      const params = new URLSearchParams();
+      if (tableId) params.set("table", tableId);
+      if (tableNumber) params.set("tableNumber", tableNumber);
+      const queryString = params.toString();
+      router.push(`/menu/${item.id}${queryString ? `?${queryString}` : ""}`);
+    },
+    [router, tableId, tableNumber],
+  );
 
-    menuItems.forEach((item) => {
-      const categoryId = item.categoryId;
-      const categoryName = item.categoryName || "Uncategorized";
+  // Get all categories (unfiltered)
+  const allCategories = useMemo(() => {
+    return categoriesData || [];
+  }, [categoriesData]);
 
-      if (!categoriesMap.has(categoryId)) {
-        categoriesMap.set(categoryId, {
-          id: categoryId,
-          name: categoryName,
-          status: "active",
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-          description: "",
-          displayOrder: 0,
-          restaurantId: item.restaurantId,
-          menuItems: [],
-        });
-      }
-
-      const category = categoriesMap.get(categoryId)!;
-      category.menuItems.push(item);
-    });
-
-    return Array.from(categoriesMap.values());
-  }, [data?.data?.items]);
-
-  if (!isMounted) {
-    return <PageLoadingSkeleton />;
-  }
+  // Get menu items from backend - already filtered and sorted
+  const menuItems = useMemo(() => {
+    if (!itemsData?.data?.items) {
+      return [];
+    }
+    // Backend returns flat array of menu items, already filtered and sorted
+    return itemsData.data.items;
+  }, [itemsData]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-6 py-8">
-        {/* Page Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Guest Menu</h1>
-          <p className="text-gray-600 mt-2">Browse our delicious menu items</p>
-        </div>
+    <MobileLayout>
+      <MobileHeader title="Smart Restaurant" tableNumber={tableNumber} />
 
-        {/* Menu Filters */}
-        <MenuFiltersSection
-          filters={filters}
-          categories={Array.isArray(categoriesData) ? categoriesData : []}
-          onFiltersChange={handleFiltersChange}
+      {/* Search Bar */}
+      <div className="search-bar">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="🔍 Search menu items..."
+          value={filters.search || ""}
+          onChange={(e) =>
+            handleFiltersChange({
+              ...filters,
+              search: e.target.value || undefined,
+            })
+          }
         />
+      </div>
 
-        {/* Content */}
-        <div>
-          {isError && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Failed to load menu data. Please try again.
-              </AlertDescription>
-            </Alert>
+      {/* Sort and Filter Bar */}
+      <div className="px-4 py-3 bg-white border-b space-y-2">
+        <div className="flex gap-2 overflow-x-auto">
+          <button
+            className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border ${
+              filters.chefRecommended
+                ? "bg-yellow-500 text-white border-yellow-500"
+                : "bg-white text-gray-700 border-gray-300"
+            }`}
+            onClick={() =>
+              handleFiltersChange({
+                ...filters,
+                chefRecommended: !filters.chefRecommended,
+              })
+            }
+          >
+            ⭐ Chef Recommend
+          </button>
+          <select
+            className="px-3 py-1.5 rounded-full text-sm border border-gray-300 bg-white"
+            value={filters.sortBy || ""}
+            onChange={(e) => {
+              const newSortBy = e.target.value as
+                | "name"
+                | "price"
+                | "popularity"
+                | "";
+              handleFiltersChange({
+                ...filters,
+                sortBy: newSortBy || undefined,
+                // Reset sortOrder if clearing sortBy
+                sortOrder: newSortBy ? filters.sortOrder || "asc" : undefined,
+              });
+            }}
+          >
+            <option value="">Sort by</option>
+            <option value="name">Name</option>
+            <option value="price">Price</option>
+            <option value="popularity">Popularity</option>
+          </select>
+          {filters.sortBy && (
+            <button
+              className="px-3 py-1.5 rounded-full text-sm border border-gray-300 bg-white whitespace-nowrap"
+              onClick={() =>
+                handleFiltersChange({
+                  ...filters,
+                  sortOrder: filters.sortOrder === "asc" ? "desc" : "asc",
+                })
+              }
+            >
+              {filters.sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+            </button>
           )}
+        </div>
+      </div>
 
-          {isLoading ? (
-            <LoadingState />
-          ) : !isError && categories.length === 0 ? (
+      {/* Category Tabs */}
+      <div className="category-tabs">
+        <button
+          className={`category-tab ${!filters.categoryId ? "active" : ""}`}
+          onClick={() =>
+            handleFiltersChange({ ...filters, categoryId: undefined })
+          }
+        >
+          All
+        </button>
+        {allCategories.map((category) => (
+          <button
+            key={category.id}
+            className={`category-tab ${filters.categoryId === category.id ? "active" : ""}`}
+            onClick={() =>
+              handleFiltersChange({ ...filters, categoryId: category.id })
+            }
+          >
+            {category.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="content menu-list" style={{ paddingBottom: "80px" }}>
+        {(isItemsError || isCategoriesError) && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load menu data. Please try again.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {(isItemsLoading || isCategoriesLoading) && <LoadingState />}
+
+        {!isItemsLoading &&
+          !isCategoriesLoading &&
+          !isItemsError &&
+          !isCategoriesError &&
+          menuItems.length === 0 && (
             <div className="text-center py-12">
               <p className="text-gray-500">
                 {filters.search
@@ -205,26 +328,93 @@ export function GuestMenuPreviewContent() {
                   : "No menu items available."}
               </p>
             </div>
-          ) : categories.length > 0 ? (
-            <div className="space-y-8">
-              {categories.map((category: GuestCategory) => (
-                <CategorySection
-                  key={category.id}
-                  category={category}
-                  onItemClick={handleItemClick}
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
+          )}
 
-      {/* Menu Item Detail Dialog */}
-      <MenuItemDetailDialog
-        item={selectedItem}
-        isOpen={isItemDialogOpen}
-        onClose={handleCloseItemDialog}
-      />
-    </div>
+        {!isItemsLoading &&
+          !isCategoriesLoading &&
+          !isItemsError &&
+          !isCategoriesError &&
+          menuItems.length > 0 && (
+            <>
+              {menuItems.map((item) => {
+                // Get primary photo or first photo
+                const primaryPhoto =
+                  item.menuItemPhotos.find((photo) => photo.isPrimary) ||
+                  item.menuItemPhotos[0];
+
+                const isAvailable = item.status === "available";
+                return (
+                  <div
+                    key={item.id}
+                    className={`menu-item ${!isAvailable ? "opacity-60 cursor-not-allowed" : ""}`}
+                    onClick={() => isAvailable && handleItemClick(item)}
+                    style={!isAvailable ? { pointerEvents: "none" } : {}}
+                  >
+                    <div className="menu-item-image">
+                      {primaryPhoto?.url ? (
+                        <Image
+                          src={primaryPhoto.url}
+                          alt={item.name}
+                          fill
+                          className="object-cover"
+                          sizes="100px"
+                          unoptimized
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML =
+                                '<span class="text-4xl">🍽️</span>';
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="text-4xl">🍽️</span>
+                      )}
+                    </div>
+                    <div className="menu-item-info">
+                      <div>
+                        <div className="menu-item-name">{item.name}</div>
+                        {/* Rating */}
+                        <div className="menu-item-rating">
+                          ☆☆☆☆☆ (0 reviews)
+                        </div>
+                        {/* Status Badge */}
+                        <span
+                          className={`menu-item-status ${item.status === "available" ? "available" : item.status === "sold_out" ? "sold-out" : "unavailable"}`}
+                        >
+                          ●{" "}
+                          {item.status === "available"
+                            ? "Available"
+                            : item.status === "sold_out"
+                              ? "Sold Out"
+                              : "Unavailable"}
+                        </span>
+                      </div>
+                      <div className="menu-item-bottom">
+                        <span className="menu-item-price">
+                          {formatPrice(item.price)}
+                        </span>
+                        {item.status === "available" && (
+                          <button
+                            className="add-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleItemClick(item);
+                            }}
+                          >
+                            + Add
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+      </div>
+    </MobileLayout>
   );
 }

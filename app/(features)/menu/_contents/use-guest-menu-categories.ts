@@ -1,0 +1,30 @@
+import { getGuestMenuCategories } from "@/api/guest-menu-api";
+import { useSafeQuery } from "@/hooks/use-safe-query";
+import Cookies from "js-cookie";
+
+const GUEST_MENU_CATEGORIES_QUERY_KEYS = {
+  all: ["guest-menu-categories"] as const,
+  lists: () => [...GUEST_MENU_CATEGORIES_QUERY_KEYS.all, "list"] as const,
+  list: (token?: string) =>
+    [...GUEST_MENU_CATEGORIES_QUERY_KEYS.lists(), token] as const,
+};
+
+/**
+ * Hook to fetch guest menu categories
+ */
+export const useGuestMenuCategoriesQuery = (token?: string) => {
+  // Token from parameter or from cookie
+  const tokenToUse =
+    token ||
+    Cookies.get("guest_menu_token") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+
+  return useSafeQuery(
+    GUEST_MENU_CATEGORIES_QUERY_KEYS.list(tokenToUse),
+    () => getGuestMenuCategories(tokenToUse || ""),
+    {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      enabled: !!tokenToUse, // Enable query if token exists
+    },
+  );
+};
