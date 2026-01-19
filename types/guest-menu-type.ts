@@ -53,15 +53,17 @@ export interface GuestMenuItem {
   categoryName?: string;
   menuItemPhotos: GuestMenuItemPhoto[];
   menuItemModifierGroups: GuestMenuItemModifierGroup[];
+  categoryName: string;
+  popularity: number;
 }
 
 export interface GuestCategory {
   id: string;
   name: string;
+  description?: string;
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
-  description?: string;
   displayOrder: number;
   restaurantId: string;
   menuItems: GuestMenuItem[];
@@ -69,8 +71,12 @@ export interface GuestCategory {
 
 // Query parameters for API calls
 export interface GuestMenuQueryParams {
+  token: string;
   table?: string;
   search?: string;
+  chefRecommended?: boolean;
+  sortBy?: "name" | "price" | "popularity";
+  sortOrder?: "asc" | "desc";
   categoryId?: string;
   chefRecommended?: boolean;
   sortBy?: "name" | "price" | "popularity";
@@ -90,7 +96,7 @@ export interface GuestMenuPagination {
 export interface GuestMenuResponse {
   success: boolean;
   data: {
-    items: GuestCategory[];
+    items: GuestMenuItem[];
     pagination: GuestMenuPagination;
   };
 }

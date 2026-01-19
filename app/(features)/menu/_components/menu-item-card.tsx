@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Clock } from "lucide-react";
 import Image from "next/image";
 import type { GuestMenuItem } from "@/types/guest-menu-type";
+import { PopularityIndicator } from "./popularity-indicator";
 
 interface MenuItemCardProps {
   item: GuestMenuItem;
@@ -23,45 +24,54 @@ export function MenuItemCard({ item, onItemClick }: MenuItemCardProps) {
 
   return (
     <Card
-      className="w-full hover:shadow-md transition-shadow cursor-pointer"
+      className="w-full hover:shadow-md transition-shadow cursor-pointer h-full flex flex-col"
       onClick={() => onItemClick(item)}
     >
-      <CardContent className="p-0">
+      <CardContent className="p-0 flex flex-col h-full">
         {/* Image */}
-        {imageUrl && (
-          <Image
-            src={imageUrl}
-            alt={item.name}
-            width={400}
-            height={300}
-            className="w-full md:h-60 object-cover"
-            unoptimized
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = "none";
-            }}
-          />
-        )}
+        <div className="relative">
+          {imageUrl && (
+            <Image
+              src={imageUrl}
+              alt={item.name}
+              width={400}
+              height={300}
+              className="w-full h-48 object-cover"
+            />
+          )}
+          {/* Popularity Badge */}
+          {item.popularity > 0 && (
+            <div className="absolute top-2 right-2">
+              <PopularityIndicator
+                popularity={item.popularity}
+                variant="badge"
+              />
+            </div>
+          )}
+        </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="p-4 flex flex-col flex-1">
           <div className="flex items-start justify-between mb-2">
             <h3 className="font-semibold text-lg text-gray-900 leading-tight">
               {item.name}
             </h3>
-            <span className="font-bold text-lg text-green-600 ml-2">
+            <span className="font-bold text-lg text-green-600 ml-2 shrink-0">
               {formatPrice(item.price)}
             </span>
           </div>
 
-          {item.description && (
-            <p className="text-sm text-gray-600 mb-3 line-clamp-1">
-              {item.description}
-            </p>
-          )}
+          {/* Fixed height description area */}
+          <div className="mb-3 h-5">
+            {item.description && (
+              <p className="text-sm text-gray-600 line-clamp-1">
+                {item.description}
+              </p>
+            )}
+          </div>
 
-          {/* Prep time and modifiers info */}
-          <div className="flex items-center justify-between text-xs text-gray-500">
+          {/* Prep time and modifiers info - pushed to bottom */}
+          <div className="flex items-center justify-between text-xs text-gray-500 mt-auto">
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               <span>{item.prepTimeMinutes} min</span>
