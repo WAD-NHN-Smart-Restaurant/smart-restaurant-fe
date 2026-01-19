@@ -40,7 +40,7 @@ export function MenuItemCard({ item, onItemClick }: MenuItemCardProps) {
             />
           )}
           {/* Popularity Badge */}
-          {item.popularity > 0 && (
+          {item.popularity != null && item.popularity > 0 && (
             <div className="absolute top-2 right-2">
               <PopularityIndicator
                 popularity={item.popularity}

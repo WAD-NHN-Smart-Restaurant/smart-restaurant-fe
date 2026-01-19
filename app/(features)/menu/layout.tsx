@@ -8,7 +8,6 @@ export default function ProtectedLayout({
 }>) {
   return (
     <>
-      <Navbar />
       <main>{children}</main>
     </>
   );

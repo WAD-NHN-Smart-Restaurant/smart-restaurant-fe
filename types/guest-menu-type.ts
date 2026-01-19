@@ -53,8 +53,6 @@ export interface GuestMenuItem {
   categoryName?: string;
   menuItemPhotos: GuestMenuItemPhoto[];
   menuItemModifierGroups: GuestMenuItemModifierGroup[];
-  categoryName: string;
-  popularity: number;
 }
 
 export interface GuestCategory {
@@ -71,16 +69,12 @@ export interface GuestCategory {
 
 // Query parameters for API calls
 export interface GuestMenuQueryParams {
-  token: string;
   table?: string;
   search?: string;
   chefRecommended?: boolean;
   sortBy?: "name" | "price" | "popularity";
   sortOrder?: "asc" | "desc";
   categoryId?: string;
-  chefRecommended?: boolean;
-  sortBy?: "name" | "price" | "popularity";
-  sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
 }

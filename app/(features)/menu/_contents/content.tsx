@@ -139,6 +139,8 @@ export function GuestMenuPreviewContent() {
     },
     [searchParams, router, pathname, tableId, tableNumber],
   );
+  // Get token from cookie
+  const token = Cookies.get(GUEST_TOKEN_COOKIE);
 
   // Memoize query parameters for menu items
   const queryParams: GuestMenuQueryParams = useMemo(
@@ -151,6 +153,7 @@ export function GuestMenuPreviewContent() {
       page: 1,
       limit: 100, // Get all items for preview
       table: tableId,
+      token: token || "",
     }),
     [
       filters.search,
@@ -159,11 +162,9 @@ export function GuestMenuPreviewContent() {
       filters.sortBy,
       filters.sortOrder,
       tableId,
+      token,
     ],
   );
-
-  // Get token from cookie
-  const token = Cookies.get(GUEST_TOKEN_COOKIE);
 
   // Fetch menu items
   const {
