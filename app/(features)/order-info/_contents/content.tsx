@@ -602,7 +602,8 @@ export function OrderInfoContent() {
         if (order) {
           setOrder({ ...order, status: "payment_pending" });
         }
-        setInfo("Bill requested. A staff member will assist you shortly.");
+        // Navigate to payment page
+        router.push("/payment");
       } else {
         setError(response.data?.message || "Unable to request bill");
       }
