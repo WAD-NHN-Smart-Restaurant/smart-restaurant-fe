@@ -10,12 +10,14 @@ export const PROTECTED_PATHS = {
     CREATE: "/tables/create",
     EDIT: (id: string) => `/tables/${id}/edit`,
   },
+  ORDER_HISTORY: "/order-history",
 };
 
 export const PUBLIC_PATHS = {
   MENU: {
     INDEX: "/menu",
   },
+  ORDER_INFO: "/order-info",
 };
 
 // All paths combined for easy access
