@@ -546,7 +546,7 @@ export function OrderHistoryContent() {
                   item.menu_items.menu_item_photos?.[0]?.url;
 
                 const itemTotal =
-                  item.unitPrice * item.quantity +
+                  item.unit_price * item.quantity +
                   (item.order_item_options?.reduce(
                     (sum, opt) => sum + opt.price_at_time,
                     0,
@@ -592,9 +592,9 @@ export function OrderHistoryContent() {
                             </div>
                           )}
 
-                        {item.specialRequest && (
+                        {item.note && (
                           <p className="text-sm text-gray-600 italic mb-2">
-                            Note: {item.specialRequest}
+                            Note: {item.note}
                           </p>
                         )}
 

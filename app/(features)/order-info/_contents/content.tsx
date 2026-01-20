@@ -707,7 +707,7 @@ export function OrderInfoContent() {
       setError(null);
       setInfo(null);
       setError(null);
-      const response = await requestBill();
+      const response = await requestBill(order.id);
       if (response?.success && response.data?.status) {
         // Save order ID to session storage for payment page
         if (typeof window !== "undefined") {
