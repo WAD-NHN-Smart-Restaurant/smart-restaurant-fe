@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/cart-context";
-import { createOrder } from "@/api/order-api";
+import { useCreateOrderMutation } from "@/hooks/use-order-query";
 import { CartSummary } from "@/components/cart-summary";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,9 +17,10 @@ export function CheckoutContent() {
   const { items, clearCart, totalPrice } = useCart();
   const [guestName, setGuestName] = useState("");
   const [notes, setNotes] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | null>(null);
+
+  const createOrderMutation = useCreateOrderMutation();
 
   // Load table number from localStorage
   useEffect(() => {
@@ -55,62 +56,49 @@ export function CheckoutContent() {
   }
 
   const handleSubmitOrder = async () => {
-    try {
-      setError(null);
-      setIsSubmitting(true);
+    setError(null);
 
-      // Get tableId from localStorage (set during QR scan)
-      const tableId = localStorage.getItem("guest_table_id");
-      if (!tableId) {
-        setError("Table ID not found. Please scan QR code again.");
-        setIsSubmitting(false);
-        return;
-      }
+    // Get tableId from localStorage (set during QR scan)
+    const tableId = localStorage.getItem("guest_table_id");
+    if (!tableId) {
+      setError("Table ID not found. Please scan QR code again.");
+      return;
+    }
 
-      // Prepare order items
-      const orderItems = items.map((item) => ({
-        menuItemId: item.menuItemId,
-        quantity: item.quantity,
-        specialRequest: item.specialRequest,
-        options: item.options.map((opt) => ({
-          optionId: opt.optionId,
-          priceAtTime: opt.priceAtTime,
-        })),
-      }));
+    // Prepare order items
+    const orderItems = items.map((item) => ({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      specialRequest: item.specialRequest,
+      options: item.options.map((opt) => ({
+        optionId: opt.optionId,
+        priceAtTime: opt.priceAtTime,
+      })),
+    }));
 
-      const orderPayload = {
-        tableId,
-        items: orderItems,
-        guestName: guestName || undefined,
-        notes: notes || undefined,
-      };
+    const orderPayload = {
+      tableId,
+      items: orderItems,
+      guestName: guestName || undefined,
+      notes: notes || undefined,
+    };
 
-      console.log("=== ORDER PAYLOAD ===");
-      console.log(JSON.stringify(orderPayload, null, 2));
-      console.log("====================");
+    console.log("=== ORDER PAYLOAD ===");
+    console.log(JSON.stringify(orderPayload, null, 2));
+    console.log("====================");
 
-      const response = await createOrder(orderPayload);
-
-      console.log("Order response:", response);
-
-      // Check both success (from interceptor) and status (from controller)
-      if (response.success && response.data?.status) {
+    createOrderMutation.mutate(orderPayload, {
+      onSuccess: () => {
         clearCart();
         router.push("/order-info");
-      } else {
-        console.error("Order creation failed:", response);
-        setError(
-          response.data?.message || "Error creating order. Please try again.",
-        );
-      }
-    } catch (err: unknown) {
-      console.error("Order creation error:", err);
-      const message =
-        (err as { message?: string })?.message ?? "Error creating order";
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+      },
+      onError: (err: unknown) => {
+        console.error("Order creation error:", err);
+        const message =
+          (err as { message?: string })?.message ?? "Error creating order";
+        setError(message);
+      },
+    });
   };
 
   return (
@@ -137,7 +125,7 @@ export function CheckoutContent() {
             placeholder="Enter your name so staff can identify you"
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
-            disabled={isSubmitting}
+            disabled={createOrderMutation.isPending}
           />
         </div>
 
@@ -149,7 +137,7 @@ export function CheckoutContent() {
             placeholder="Any special requests for the entire order?"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            disabled={isSubmitting}
+            disabled={createOrderMutation.isPending}
           />
         </div>
 
@@ -190,9 +178,9 @@ export function CheckoutContent() {
           className="add-to-cart-btn"
           style={{ width: "100%" }}
           onClick={handleSubmitOrder}
-          disabled={isSubmitting}
+          disabled={createOrderMutation.isPending}
         >
-          {isSubmitting
+          {createOrderMutation.isPending
             ? "Placing Order..."
             : `Place Order - ${formatPrice(totalPrice)}`}
         </button>
@@ -208,7 +196,7 @@ export function CheckoutContent() {
             cursor: "pointer",
           }}
           onClick={() => router.push("/menu")}
-          disabled={isSubmitting}
+          disabled={createOrderMutation.isPending}
         >
           Continue Browsing
         </button>

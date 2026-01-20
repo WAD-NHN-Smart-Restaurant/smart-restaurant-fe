@@ -6,10 +6,13 @@ let socket: Socket | null = null;
 
 export const getSocket = () => {
   if (!socket) {
-    socket = io(`${process.env.NEXT_PUBLIC_API_BASE_URL}/orders`, {
-      transports: ["websocket", "polling"],
-      autoConnect: false,
-    });
+    socket = io(
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/orders`,
+      {
+        transports: ["websocket", "polling"],
+        autoConnect: false,
+      },
+    );
   }
   return socket;
 };
@@ -31,7 +34,8 @@ export const disconnectSocket = () => {
 export const joinTable = (tableId: string) => {
   const socket = getSocket();
   if (socket.connected) {
-    socket.emit("join_table", { table_id: tableId });
+    // Guests only join table-specific rooms, not restaurant rooms
+    socket.emit("join-table", { table_id: tableId });
   }
 };
 
@@ -44,8 +48,8 @@ export const onOrderStatusUpdated = (
   }) => void,
 ) => {
   const socket = getSocket();
-  socket.on("order_status_updated", callback);
-  return () => socket.off("order_status_updated", callback);
+  socket.on("order-status-updated", callback);
+  return () => socket.off("order-status-updated", callback);
 };
 
 export const onOrderItemUpdated = (
@@ -57,6 +61,6 @@ export const onOrderItemUpdated = (
   }) => void,
 ) => {
   const socket = getSocket();
-  socket.on("order_item_updated", callback);
-  return () => socket.off("order_item_updated", callback);
+  socket.on("order-item-updated", callback);
+  return () => socket.off("order-item-updated", callback);
 };

@@ -13,7 +13,7 @@ export function proxy(request: NextRequest) {
   const guestToken =
     request.cookies.get("guest_menu_token") ||
     process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
-  console.log("Guest Token in Middleware:", guestToken);
+  // console.log("Guest Token in Middleware:", guestToken);
   //const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
 
   // Development mode: Auto-inject test token for guest routes
