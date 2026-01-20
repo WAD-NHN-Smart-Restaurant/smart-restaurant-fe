@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
@@ -31,6 +32,14 @@ export function MobileHeader({
   const router = useRouter();
   const { user, isAuthenticated, logout, isLoading } = useAuth();
   const [mounted, setMounted] = useState(false);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      router.back();
+    }
+  };
 
   useEffect(() => {
     setMounted(true);

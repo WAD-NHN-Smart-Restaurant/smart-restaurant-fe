@@ -19,6 +19,32 @@ import {
   onOrderItemUpdated,
 } from "@/libs/socket";
 
+// Helper function to extract error message from various error types
+const getErrorMessage = (err: unknown): string => {
+  if (!err) return "An unknown error occurred";
+
+  if (typeof err === "object" && err !== null) {
+    const error = err as Record<string, unknown>;
+
+    if (typeof error.message === "string") {
+      return error.message;
+    }
+
+    if (
+      error.data &&
+      typeof error.data === "object" &&
+      "message" in error.data &&
+      typeof (error.data as Record<string, unknown>).message === "string"
+    ) {
+      return (error.data as Record<string, unknown>).message as string;
+    }
+  }
+
+  if (typeof err === "string") return err;
+
+  return "An unexpected error occurred";
+};
+
 interface OrderItem {
   id: string;
   menuItemId: string;
@@ -467,7 +493,14 @@ export function OrderInfoContent() {
 
   const currentOrders = order ? [order] : [];
   const pastOrders: Order[] = [];
-
+  // Check if all items are ready or served (for bill request)
+  const canRequestBill = useMemo(() => {
+    if (!order?.orderItems || order.orderItems.length === 0) return false;
+    return (
+      order.orderItems.every((item) => item.status === "served") ||
+      order.status === "served"
+    );
+  }, [order]);
   // Initialize WebSocket connection
   useEffect(() => {
     const storedTableId = localStorage.getItem("tableId");
@@ -531,8 +564,8 @@ export function OrderInfoContent() {
         setError(null);
         const response = await getCurrentOrder();
         // Response has structure: {success, data: {status, data: RawOrder}}
-        if (response?.success && response.data?.status) {
-          const raw = response.data.data as any; // Backend may return camelCase or snake_case
+        if (response?.success) {
+          const raw = response.data as any; // Backend may return camelCase or snake_case
 
           // Handle both camelCase (new) and snake_case (old) responses
           const orderItems = raw.orderItems || raw.order_items || [];
@@ -579,8 +612,7 @@ export function OrderInfoContent() {
         }
       } catch (err: unknown) {
         const message =
-          (err as { message?: string })?.message ??
-          "Error loading order information";
+          getErrorMessage(err) || "Error loading order information";
         setError(message);
       } finally {
         setIsLoading(false);
@@ -596,19 +628,21 @@ export function OrderInfoContent() {
     try {
       setIsSubmitting(true);
       setInfo(null);
+      setError(null);
       const response = await requestBill();
       if (response?.success && response.data?.status) {
         // Update order status
         if (order) {
           setOrder({ ...order, status: "payment_pending" });
         }
-        setInfo("Bill requested. A staff member will assist you shortly.");
+        // Auto-navigate to payment page where customer will see the waiting screen
+        // and automatic updates when waiter accepts the payment
+        router.push("/payment");
       } else {
         setError(response.data?.message || "Unable to request bill");
       }
     } catch (err: unknown) {
-      const message =
-        (err as { message?: string })?.message ?? "Error requesting bill";
+      const message = getErrorMessage(err) || "Error requesting bill";
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -621,14 +655,13 @@ export function OrderInfoContent() {
       setError(null);
       setInfo(null);
       const response = await callWaiter();
-      if (response?.success && response.data?.status) {
+      if (response?.success) {
         setInfo("Waiter notified. Please stay seated.");
       } else {
         setError(response.data?.message || "Unable to call waiter");
       }
     } catch (err: unknown) {
-      const message =
-        (err as { message?: string })?.message ?? "Error calling waiter";
+      const message = getErrorMessage(err) || "Error calling waiter";
       setError(message);
     } finally {
       setIsCallingWaiter(false);
@@ -756,9 +789,9 @@ export function OrderInfoContent() {
               <button
                 onClick={handleRequestBill}
                 disabled={
-                  isSubmitting ||
                   order?.status === "payment_pending" ||
-                  order?.status === "completed"
+                  order?.status === "completed" ||
+                  !canRequestBill
                 }
                 onMouseEnter={() => setIsHoveringRequestBill(true)}
                 onMouseLeave={() => setIsHoveringRequestBill(false)}
@@ -766,32 +799,33 @@ export function OrderInfoContent() {
                   padding: "8px 16px",
                   background:
                     order?.status === "payment_pending" ||
-                    order?.status === "completed"
+                    order?.status === "completed" ||
+                    !canRequestBill
                       ? "#cccccc"
-                      : isHoveringRequestBill && !isSubmitting
+                      : isHoveringRequestBill
                         ? "#f5f5f5"
                         : "white",
                   color:
                     order?.status === "payment_pending" ||
-                    order?.status === "completed"
+                    order?.status === "completed" ||
+                    !canRequestBill
                       ? "#666666"
                       : "#e74c3c",
                   border: "none",
                   borderRadius: "20px",
                   fontWeight: "700",
                   cursor:
-                    isSubmitting ||
                     order?.status === "payment_pending" ||
-                    order?.status === "completed"
+                    order?.status === "completed" ||
+                    !canRequestBill
                       ? "not-allowed"
                       : "pointer",
-                  opacity: isSubmitting ? 0.6 : 1,
                   fontSize: "14px",
                   whiteSpace: "nowrap",
                   transition: "all 0.2s ease",
                   transform:
                     isHoveringRequestBill &&
-                    !isSubmitting &&
+                    canRequestBill &&
                     !(
                       order?.status === "payment_pending" ||
                       order?.status === "completed"
@@ -800,7 +834,7 @@ export function OrderInfoContent() {
                       : "scale(1)",
                   boxShadow:
                     isHoveringRequestBill &&
-                    !isSubmitting &&
+                    canRequestBill &&
                     !(
                       order?.status === "payment_pending" ||
                       order?.status === "completed"
@@ -813,7 +847,9 @@ export function OrderInfoContent() {
                   ? "Bill Requested"
                   : order?.status === "completed"
                     ? "Paid"
-                    : "Request Bill"}
+                    : !canRequestBill
+                      ? "Items Not Served"
+                      : "Request Bill"}
               </button>
               <button
                 onClick={handleCallWaiter}

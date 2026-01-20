@@ -126,3 +126,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles for bill preview */
+@media print {
+  /* Hide everything except bill content */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the bill preview content */
+  [data-print-content="true"],
+  [data-print-content="true"] * {
+    visibility: visible;
+  }
+
+  [data-print-content="true"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+  }
+
+  /* Hide buttons and nav elements during print */
+  button,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* Optimize print layout */
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+}
