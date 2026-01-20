@@ -21,10 +21,19 @@ export const useGuestMenuCategoriesQuery = (token?: string) => {
 
   return useSafeQuery(
     GUEST_MENU_CATEGORIES_QUERY_KEYS.list(tokenToUse),
-    () => getGuestMenuCategories(tokenToUse || ""),
+    async () => {
+      if (!tokenToUse) {
+        console.warn("No guest token available for categories query");
+        return [];
+      }
+      const result = await getGuestMenuCategories(tokenToUse);
+      return result ?? [];
+    },
     {
       staleTime: 5 * 60 * 1000, // 5 minutes
       enabled: !!tokenToUse, // Enable query if token exists
+      retry: 1,
+      hideErrorSnackbar: true, // Optional: Don't show error toast for guest routes
     },
   );
 };

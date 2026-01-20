@@ -58,9 +58,19 @@ export const userSchema = z.object({
   name: z.string().optional(),
   email: z.string().email(),
   avatar: z.string().optional(),
+  phone: z.string().optional(),
   role: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+  profile: z
+    .object({
+      fullName: z.string().nullable(),
+      phoneNumber: z.string().nullable(),
+      avatarUrl: z.string().nullable(),
+      role: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const loginResponseSchema = z.object({

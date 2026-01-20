@@ -5,20 +5,12 @@ import {
   LoginResponse,
   RegisterResponse,
   User,
-  EmailConfirmationData,
-  ConfirmEmailResponse,
   ResetPasswordFormData,
   ResetPasswordResponse,
   UpdatePasswordFormData,
   UpdatePasswordResponse,
   CurrentUserResponse,
 } from "@/types/auth-type";
-import {
-  registerResponseSchema,
-  confirmEmailResponseSchema,
-  resetPasswordResponseSchema,
-  updatePasswordResponseSchema,
-} from "@/schema/auth-schema";
 import { ApiResponse } from "@/types/api-type";
 
 // Type for API error response from interceptor
@@ -59,6 +51,7 @@ export const loginApi = async (
       AUTH_API.LOGIN,
       credentials,
     );
+    console.log("Login response data:", response.data);
     return response.data;
   } catch (error: unknown) {
     throw error;
@@ -76,8 +69,7 @@ export const registerApi = async (
       AUTH_API.REGISTER,
       userData,
     );
-    const result = registerResponseSchema.parse(response.data);
-    return result;
+    return response.data;
   } catch (error: unknown) {
     // Handle Zod validation errors
     if (error instanceof Error && error.name === "ZodError") {
@@ -191,20 +183,19 @@ export const checkAuthStatus = async (): Promise<boolean> => {
 /**
  * Confirm email with OTP token
  */
-export const confirmEmailApi = async (
-  data: EmailConfirmationData,
-): Promise<ConfirmEmailResponse> => {
-  try {
-    const response = await api.post<
-      EmailConfirmationData,
-      ConfirmEmailResponse
-    >(AUTH_API.EMAIL_CONFIRM, data);
-    const result = confirmEmailResponseSchema.parse(response.data);
-    return result;
-  } catch (error: unknown) {
-    throw error;
-  }
-};
+// export const confirmEmailApi = async (
+//   data: EmailConfirmationData,
+// ): Promise<ConfirmEmailResponse> => {
+//   try {
+//     const response = await api.post<
+//       EmailConfirmationData,
+//       ConfirmEmailResponse
+//     >(AUTH_API.EMAIL_CONFIRM, data);
+//     return response.data;
+//   } catch (error: unknown) {
+//     throw error;
+//   }
+// };
 
 /**
  * Send password reset email
@@ -217,8 +208,7 @@ export const resetPasswordApi = async (
       ResetPasswordFormData,
       ResetPasswordResponse
     >(AUTH_API.RESET_PASSWORD, data);
-    const result = resetPasswordResponseSchema.parse(response.data);
-    return result;
+    return response.data;
   } catch (error: unknown) {
     throw error;
   }
@@ -235,8 +225,7 @@ export const updatePasswordApi = async (
       { newPassword: string },
       UpdatePasswordResponse
     >(AUTH_API.UPDATE_PASSWORD, { newPassword: data.newPassword });
-    const result = updatePasswordResponseSchema.parse(response.data);
-    return result;
+    return response.data;
   } catch (error: unknown) {
     throw error;
   }

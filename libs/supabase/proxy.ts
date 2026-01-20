@@ -14,6 +14,13 @@ const publicRoutes = [
   "/",
 ];
 
+const GUEST_ROUTES = [
+  "/menu",
+  "/checkout",
+  "/order-info",
+];
+
+
 function isPublicRoute(pathname: string) {
   return publicRoutes.some(
     (route) => pathname === route || pathname.startsWith(route + "/"),
@@ -73,7 +80,7 @@ export async function updateSession(request: NextRequest) {
   // 🚫 Chỉ redirect khi:
   // - Không có user
   // - Route KHÔNG public
-  if (!user && !isPublicRoute(pathname)) {
+  if (!user && !GUEST_ROUTES.some((route) => pathname.startsWith(route))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

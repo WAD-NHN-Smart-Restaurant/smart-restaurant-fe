@@ -165,15 +165,7 @@ export function CheckoutContent() {
       </div>
 
       {/* Place Order Bar */}
-      <div
-        className="add-to-cart-bar"
-        style={{
-          flexDirection: "column",
-          gap: "10px",
-          height: "auto",
-          padding: "15px 20px",
-        }}
-      >
+      <div className="add-to-cart-bar">
         <button
           className="add-to-cart-btn"
           style={{ width: "100%" }}

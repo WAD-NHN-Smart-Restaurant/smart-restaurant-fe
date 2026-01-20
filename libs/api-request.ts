@@ -43,6 +43,10 @@ export const tokenManager = {
     return Cookies.get(ACCESS_TOKEN_KEY) || null;
   },
 
+  getRefreshToken: (): string | null => {
+    return Cookies.get("refresh_token") || null;
+  },
+
   clearTokens: () => {
     // Cookies.remove(ACCESS_TOKEN_KEY);
   },

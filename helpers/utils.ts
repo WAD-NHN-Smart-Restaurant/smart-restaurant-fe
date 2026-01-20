@@ -7,7 +7,7 @@ export const isPathType = (path: string, type: PathType): boolean => {
   switch (type) {
     case "auth":
       return Object.values(AUTH_PATHS).includes(
-        path as (typeof AUTH_PATHS)[keyof typeof AUTH_PATHS],
+        path as unknown as (typeof AUTH_PATHS)[keyof typeof AUTH_PATHS],
       );
 
     case "protected": {
