@@ -467,7 +467,14 @@ export function OrderInfoContent() {
 
   const currentOrders = order ? [order] : [];
   const pastOrders: Order[] = [];
-
+  // Check if all items are ready or served (for bill request)
+  const canRequestBill = useMemo(() => {
+    if (!order?.orderItems || order.orderItems.length === 0) return false;
+    return (
+      order.orderItems.every((item) => item.status === "served") ||
+      order.status === "served"
+    );
+  }, [order]);
   // Initialize WebSocket connection
   useEffect(() => {
     const storedTableId = localStorage.getItem("tableId");
@@ -531,8 +538,8 @@ export function OrderInfoContent() {
         setError(null);
         const response = await getCurrentOrder();
         // Response has structure: {success, data: {status, data: RawOrder}}
-        if (response?.success && response.data?.status) {
-          const raw = response.data.data as any; // Backend may return camelCase or snake_case
+        if (response?.success) {
+          const raw = response.data as any; // Backend may return camelCase or snake_case
 
           // Handle both camelCase (new) and snake_case (old) responses
           const orderItems = raw.orderItems || raw.order_items || [];
@@ -622,7 +629,7 @@ export function OrderInfoContent() {
       setError(null);
       setInfo(null);
       const response = await callWaiter();
-      if (response?.success && response.data?.status) {
+      if (response?.success) {
         setInfo("Waiter notified. Please stay seated.");
       } else {
         setError(response.data?.message || "Unable to call waiter");
@@ -753,9 +760,9 @@ export function OrderInfoContent() {
               <button
                 onClick={handleRequestBill}
                 disabled={
-                  isSubmitting ||
                   order?.status === "payment_pending" ||
-                  order?.status === "completed"
+                  order?.status === "completed" ||
+                  !canRequestBill
                 }
                 onMouseEnter={() => setIsHoveringRequestBill(true)}
                 onMouseLeave={() => setIsHoveringRequestBill(false)}
@@ -763,32 +770,33 @@ export function OrderInfoContent() {
                   padding: "8px 16px",
                   background:
                     order?.status === "payment_pending" ||
-                    order?.status === "completed"
+                    order?.status === "completed" ||
+                    !canRequestBill
                       ? "#cccccc"
-                      : isHoveringRequestBill && !isSubmitting
+                      : isHoveringRequestBill
                         ? "#f5f5f5"
                         : "white",
                   color:
                     order?.status === "payment_pending" ||
-                    order?.status === "completed"
+                    order?.status === "completed" ||
+                    !canRequestBill
                       ? "#666666"
                       : "#e74c3c",
                   border: "none",
                   borderRadius: "20px",
                   fontWeight: "700",
                   cursor:
-                    isSubmitting ||
                     order?.status === "payment_pending" ||
-                    order?.status === "completed"
+                    order?.status === "completed" ||
+                    !canRequestBill
                       ? "not-allowed"
                       : "pointer",
-                  opacity: isSubmitting ? 0.6 : 1,
                   fontSize: "14px",
                   whiteSpace: "nowrap",
                   transition: "all 0.2s ease",
                   transform:
                     isHoveringRequestBill &&
-                    !isSubmitting &&
+                    canRequestBill &&
                     !(
                       order?.status === "payment_pending" ||
                       order?.status === "completed"
@@ -797,7 +805,7 @@ export function OrderInfoContent() {
                       : "scale(1)",
                   boxShadow:
                     isHoveringRequestBill &&
-                    !isSubmitting &&
+                    canRequestBill &&
                     !(
                       order?.status === "payment_pending" ||
                       order?.status === "completed"
@@ -810,7 +818,9 @@ export function OrderInfoContent() {
                   ? "Bill Requested"
                   : order?.status === "completed"
                     ? "Paid"
-                    : "Request Bill"}
+                    : !canRequestBill
+                      ? "Items Not Served"
+                      : "Request Bill"}
               </button>
               <button
                 onClick={handleCallWaiter}

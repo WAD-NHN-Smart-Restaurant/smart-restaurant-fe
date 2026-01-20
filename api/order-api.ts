@@ -1,37 +1,75 @@
 import apiRequest from "@/libs/api-request";
-import { ApiResponse } from "@/types/api-type";
-import type { Order, CreateOrderRequest } from "@/types/order-type";
+
+export interface CreateOrderRequest {
+  tableId?: string;
+  items: Array<{
+    menuItemId: string;
+    quantity: number;
+    specialRequest?: string;
+    options?: Array<{
+      optionId: string;
+      priceAtTime: number;
+    }>;
+  }>;
+  guestName?: string;
+  notes?: string;
+}
+
+export interface AddToOrderRequest {
+  items: Array<{
+    menuItemId: string;
+    quantity: number;
+    specialRequest?: string;
+    options?: Array<{
+      optionId: string;
+      priceAtTime: number;
+    }>;
+  }>;
+}
+
+type ControllerResponse<T = unknown> = {
+  status: boolean;
+  data: T;
+  message?: string;
+  pagination?: { page: number; limit: number; total: number };
+};
+
+// ResponseInterceptor wraps controller response with success flag
+type ApiResponse<T = unknown> = {
+  success: boolean;
+  data: ControllerResponse<T>;
+};
 
 /**
  * Create new order or add items to existing order
  */
 export async function createOrder(
   request: CreateOrderRequest,
-): Promise<ApiResponse<Order>> {
-  const response = await apiRequest.post<typeof request, ApiResponse<Order>>(
+): Promise<ApiResponse> {
+  const response = await apiRequest.post<typeof request, ApiResponse<unknown>>(
     "/orders/guest",
     request,
   );
-  return response.data;
+  return response.data as ApiResponse;
 }
 
 /**
  * Get current active order for guest's table
  */
-export async function getCurrentOrder(): Promise<Order | null> {
-  const response = await apiRequest.get<ApiResponse<Order>>("/orders/guest");
-  return response.data.data;
+export async function getCurrentOrder(): Promise<ApiResponse> {
+  const response = await apiRequest.get<ApiResponse>("/orders/guest");
+  return response.data;
 }
 
 /**
  * Request bill (change order status to payment_pending)
  */
-export async function requestBill(): Promise<Order> {
-  const response = await apiRequest.post<unknown, ApiResponse<Order>>(
+export async function requestBill(): Promise<ApiResponse> {
+  const response = await apiRequest.post<unknown, ApiResponse>(
     "/orders/guest/request-bill",
     {},
   );
-  return response.data.data;
+  return response.data;
 }
 
 /**
@@ -48,10 +86,10 @@ export async function cancelBillRequest(): Promise<ApiResponse> {
 /**
  * Call waiter for current table
  */
-export async function callWaiter(): Promise<{ message?: string }> {
-  const response = await apiRequest.post<unknown, ApiResponse<void>>(
+export async function callWaiter(): Promise<ApiResponse> {
+  const response = await apiRequest.post<unknown, ApiResponse>(
     "/orders/guest/call-waiter",
     {},
   );
-  return { message: response.data.message };
+  return response.data;
 }
