@@ -55,8 +55,6 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const GUEST_ROUTES = [PATHS.MENU.INDEX, "/checkout", "/order-info"];
-
 const AUTH_ROUTES = [
   AUTH_PATHS.LOGIN,
   AUTH_PATHS.REGISTER,
@@ -66,6 +64,18 @@ const AUTH_ROUTES = [
   "/callback",
 ];
 
+const GUEST_ROUTES = [
+  PATHS.MENU.INDEX,
+  "/checkout",
+  "/order-info",
+];
+
+const isGuestRoute = (pathname: string) => {
+  return GUEST_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route + "/"),
+  );
+}
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -74,11 +84,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   console.log("AuthProvider mounting, pathname:", pathname);
-
-  // Check authentication status (skip for public routes)
+  
+  // Check authentication status (skip for public routes and guest routes)
   const { data: isAuthenticated = false, isLoading: isAuthLoading } =
     useSafeQuery(AUTH_QUERY_KEYS.status, checkAuthStatus, {
-      enabled: true, // Skip if token exchange in progress
+      enabled: true, // Skip auth check on guest routes
       staleTime: 5 * 60 * 1000, // 5 minutes
       retry: false,
       hideErrorSnackbar: true, // Silent auth check
@@ -92,26 +102,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Don't show modal on auth pages or guest-allowed routes
     const isAuthPage = AUTH_ROUTES.some((route) => pathname?.startsWith(route));
-    const isGuestRoute = GUEST_ROUTES.some((route) =>
-      pathname?.startsWith(route),
-    );
 
     if (
       !isAuthLoading &&
       !isAuthenticated &&
       !hasHashFragment &&
-      !isAuthPage && // Don't show modal on auth pages
-      !isGuestRoute // Don't show modal on guest routes
+      !isAuthPage // Don't show modal on auth pages
+      && !isGuestRoute(pathname) // Don't show modal on guest routes
     ) {
       console.log("User not authenticated, showing auth modal");
       setShowAuthModal(true);
-    } else if (isAuthPage || isGuestRoute) {
+    } else if (isAuthPage || isGuestRoute(pathname)) {
       // Close modal if user navigates to auth or guest pages
       setShowAuthModal(false);
     }
   }, [isAuthLoading, isAuthenticated, pathname]);
 
-  // Get current user (skip for public routes)
+  // Get current user (skip for public routes and guest routes)
   const { data: user = null, isLoading: isUserLoading } = useSafeQuery(
     AUTH_QUERY_KEYS.user,
     getCurrentUser,

@@ -193,7 +193,8 @@ export function GuestMenuPreviewContent() {
 
   // Get all categories (unfiltered)
   const allCategories = useMemo(() => {
-    return categoriesData || [];
+    if (!categoriesData) return [];
+    return Array.isArray(categoriesData) ? categoriesData : [];
   }, [categoriesData]);
 
   // Get menu items from backend - already filtered and sorted

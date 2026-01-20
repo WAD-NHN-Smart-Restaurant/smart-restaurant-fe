@@ -30,9 +30,19 @@ export const getGuestMenu = async (
 export const getGuestMenuCategories = async (
   token: string,
 ): Promise<Category[]> => {
-  const response = await apiRequest.get<ApiResponse<Category[]>>(
-    GUEST_MENU_API.GET_CATEGORIES,
-    { params: { token } },
-  );
-  return response.data.data;
+  if (!token) {
+    console.warn("No token provided for getGuestMenuCategories");
+    return [];
+  }
+  try {
+    const response = await apiRequest.get<ApiResponse<Category[]>>(
+      GUEST_MENU_API.GET_CATEGORIES,
+      { params: { token } },
+    );
+    // Handle various response structures
+    return response.data?.data ?? response.data ?? [];
+  } catch (error) {
+    console.error("Failed to fetch guest menu categories:", error);
+    return [];
+  }
 };
