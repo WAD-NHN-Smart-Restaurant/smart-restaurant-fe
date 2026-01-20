@@ -2,7 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +18,7 @@ import { registerSchema } from "@/schema/auth-schema";
 import { RegisterFormData } from "@/types/auth-type";
 import { PATHS } from "@/data/path";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export const RegisterForm = () => {
   const {
@@ -25,6 +26,8 @@ export const RegisterForm = () => {
     isRegisterLoading,
     registerError,
   } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -39,6 +42,14 @@ export const RegisterForm = () => {
   const onSubmit = async (data: RegisterFormData) => {
     await registerUser(data);
     form.reset();
+    router.push("/verify-email?email=" + data.email);
+  };
+
+  const handleContinueAsGuest = () => {
+    // Preserve query parameters when navigating
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    const queryString = params.toString();
+    router.push(`${PATHS.MENU.INDEX}${queryString ? `?${queryString}` : ""}`);
   };
 
   return (
@@ -154,6 +165,17 @@ export const RegisterForm = () => {
           </Button>
         </form>
       </Form>
+
+      {/* Continue as Guest Button */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={handleContinueAsGuest}
+        disabled={isRegisterLoading}
+      >
+        <User className="mr-2 h-4 w-4" />
+        Continue as Guest
+      </Button>
 
       {/* Footer */}
       <div className="text-center">

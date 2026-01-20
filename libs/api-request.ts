@@ -5,8 +5,13 @@ import Cookies from "js-cookie";
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = "access_token";
+const GUEST_TOKEN_KEY = "guest_menu_token";
 const UNAUTHORIZED_STATUS = 401;
-const API_BASE_URL = process.env.NEXT_PUBLIC_HOSTNAME;
+// Normalize base URL to always include trailing /api
+const rawBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001")
+  .trim()
+  .replace(/\/$/, "");
+const API_BASE_URL = rawBase.endsWith("/api") ? rawBase : `${rawBase}/api`;
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -38,6 +43,10 @@ export const tokenManager = {
     return Cookies.get(ACCESS_TOKEN_KEY) || null;
   },
 
+  getRefreshToken: (): string | null => {
+    return Cookies.get("refresh_token") || null;
+  },
+
   clearTokens: () => {
     // Cookies.remove(ACCESS_TOKEN_KEY);
   },
@@ -46,14 +55,25 @@ export const tokenManager = {
     return !!tokenManager.getAccessToken();
   },
 };
+
+// Request interceptor: Inject auth tokens and guest token
 axiosInstance.interceptors.request.use((config) => {
-  const token = tokenManager.getAccessToken();
-  if (token) {
-    config.headers.set("Authorization", `Bearer ${token}`);
+  // Inject admin access token if available
+  const accessToken = tokenManager.getAccessToken();
+  if (accessToken) {
+    config.headers.set("Authorization", `Bearer ${accessToken}`);
   }
+
+  // Inject guest menu token if available
+  const guestToken = Cookies.get(GUEST_TOKEN_KEY);
+  if (guestToken) {
+    config.headers.set("x-guest-token", guestToken);
+  }
+
   return config;
 });
 
+// Response interceptor: Handle errors
 axiosInstance.interceptors.response.use(
   (response) => {
     return response;
@@ -63,7 +83,33 @@ axiosInstance.interceptors.response.use(
       // window.location.href = `${window.origin}/login`;
     }
 
-    return Promise.reject(error.response.data);
+    // Always reject with a safe, serializable object to avoid undefined .data access
+    // and prevent [object Object] errors
+    let safeErrorPayload: { status: boolean; message: string; data?: unknown };
+
+    if (error.response?.data) {
+      // Server responded with error data
+      safeErrorPayload = {
+        status: false,
+        message:
+          error.response.data.message || error.message || "Request failed",
+        data: error.response.data,
+      };
+    } else if (error.request) {
+      // Request was made but no response received (network error, timeout, etc.)
+      safeErrorPayload = {
+        status: false,
+        message: error.message || "Network error - no response received",
+      };
+    } else {
+      // Something else happened
+      safeErrorPayload = {
+        status: false,
+        message: error.message || "Request failed",
+      };
+    }
+
+    return Promise.reject(safeErrorPayload);
   },
 );
 

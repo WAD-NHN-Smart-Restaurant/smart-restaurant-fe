@@ -2,7 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,9 +18,13 @@ import { loginSchema } from "@/schema/auth-schema";
 import { LoginFormData } from "@/types/auth-type";
 import Link from "next/link";
 import { PATHS } from "@/data/path";
+import { GoogleSignInButton } from "./google-sign-in-button";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export const LoginForm = () => {
   const { login, isLoginLoading, loginError } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -32,6 +36,13 @@ export const LoginForm = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     await login(data);
+  };
+
+  const handleContinueAsGuest = () => {
+    // Preserve query parameters when navigating
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    const queryString = params.toString();
+    router.push(`${PATHS.MENU.INDEX}${queryString ? `?${queryString}` : ""}`);
   };
 
   return (
@@ -86,6 +97,18 @@ export const LoginForm = () => {
             )}
           />
 
+          {/* Forgot Password Link */}
+          <div className="flex justify-end">
+            <Button
+              variant="link"
+              className="p-0 h-auto text-primary hover:text-primary/80"
+              disabled={isLoginLoading}
+              asChild
+            >
+              <Link href={PATHS.FORGOT_PASSWORD}>Forgot Password?</Link>
+            </Button>
+          </div>
+
           {/* Submit Button */}
           <Button type="submit" className="w-full" disabled={isLoginLoading}>
             {isLoginLoading ? (
@@ -105,6 +128,32 @@ export const LoginForm = () => {
           )}
         </form>
       </Form>
+
+      {/* Divider */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            Or continue with
+          </span>
+        </div>
+      </div>
+
+      {/* Google Sign In Button */}
+      <GoogleSignInButton />
+
+      {/* Continue as Guest Button */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={handleContinueAsGuest}
+        disabled={isLoginLoading}
+      >
+        <User className="mr-2 h-4 w-4" />
+        Continue as Guest
+      </Button>
 
       {/* Footer */}
       <div className="text-center space-y-4">

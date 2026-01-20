@@ -5,32 +5,39 @@ import {
   LoginResponse,
   RegisterResponse,
   User,
-  EmailConfirmationData,
-  ConfirmEmailResponse,
   ResetPasswordFormData,
   ResetPasswordResponse,
   UpdatePasswordFormData,
   UpdatePasswordResponse,
   CurrentUserResponse,
 } from "@/types/auth-type";
-import {
-  registerResponseSchema,
-  confirmEmailResponseSchema,
-  resetPasswordResponseSchema,
-  updatePasswordResponseSchema,
-} from "@/schema/auth-schema";
 import { ApiResponse } from "@/types/api-type";
 
+// Type for API error response from interceptor
+interface ApiErrorPayload {
+  status?: boolean;
+  message?: string;
+  [key: string]: unknown;
+}
+
 const AUTH_API = {
-  LOGIN: "/api/auth/login",
-  REGISTER: "/api/auth/register",
-  LOGOUT: "/api/auth/logout",
-  REFRESH_TOKEN: "/api/auth/refresh",
-  EMAIL_CONFIRM: "/api/auth/confirm",
-  ME: "/api/auth/me",
-  RESET_PASSWORD: "/api/auth/reset-password",
-  UPDATE_PASSWORD: "/api/auth/update-password",
-  RESEND_CONFIRMATION: "/api/auth/resend-confirmation",
+  LOGIN: "auth/login",
+  REGISTER: "auth/register",
+  LOGOUT: "auth/logout",
+  REFRESH_TOKEN: "auth/refresh",
+  EMAIL_CONFIRM: "auth/confirm",
+  ME: "auth/me",
+  RESET_PASSWORD: "auth/reset-password",
+  UPDATE_PASSWORD: "auth/update-password",
+  RESEND_CONFIRMATION: "auth/resend-confirmation",
+};
+
+/**
+ * Generate guest token for anonymous access
+ */
+export const generateGuestToken = (tableToken: string): string => {
+  // Return the provided table token (QR token from table)
+  return tableToken;
 };
 
 /**
@@ -44,6 +51,7 @@ export const loginApi = async (
       AUTH_API.LOGIN,
       credentials,
     );
+    console.log("Login response data:", response.data);
     return response.data;
   } catch (error: unknown) {
     throw error;
@@ -61,10 +69,37 @@ export const registerApi = async (
       AUTH_API.REGISTER,
       userData,
     );
-    const result = registerResponseSchema.parse(response.data);
-    return result;
+    return response.data;
   } catch (error: unknown) {
-    throw error;
+    // Handle Zod validation errors
+    if (error instanceof Error && error.name === "ZodError") {
+      const zodError = error as Error & {
+        errors?: Array<{ message?: string }>;
+      };
+      const message =
+        zodError.errors?.[0]?.message || "Registration validation failed";
+      const registerError = new Error(message);
+      throw registerError;
+    }
+
+    // Handle API error payloads from interceptor
+    if (
+      error &&
+      typeof error === "object" &&
+      "message" in error &&
+      typeof (error as ApiErrorPayload).message === "string"
+    ) {
+      throw new Error((error as ApiErrorPayload).message);
+    }
+
+    // Handle Error instances
+    if (error instanceof Error) {
+      throw new Error(error.message || "Registration failed");
+    }
+
+    // Handle unknown errors
+    console.error("Unknown registration error:", error);
+    throw new Error("Registration failed. Please try again.");
   }
 };
 
@@ -91,10 +126,36 @@ export const getCurrentUser = async (): Promise<User> => {
       AUTH_API.ME,
     );
 
-    return response.data.data.data;
+    // Handle nested response structure
+    const userData = response.data?.data?.data || response.data?.data;
+    if (!userData) {
+      throw new Error("Invalid user data response");
+    }
+    return userData;
   } catch (error: unknown) {
+    // Handle API error payloads from interceptor
+    if (
+      error &&
+      typeof error === "object" &&
+      "message" in error &&
+      typeof (error as ApiErrorPayload).message === "string"
+    ) {
+      console.error(
+        "Get current user error:",
+        (error as ApiErrorPayload).message,
+      );
+      throw new Error((error as ApiErrorPayload).message);
+    }
+
+    // Handle Error instances
+    if (error instanceof Error) {
+      console.error("Get current user error:", error.message);
+      throw error;
+    }
+
+    // Handle unknown errors
     console.error("Get current user error:", error);
-    throw error;
+    throw new Error("Failed to fetch user data");
   }
 };
 
@@ -122,20 +183,19 @@ export const checkAuthStatus = async (): Promise<boolean> => {
 /**
  * Confirm email with OTP token
  */
-export const confirmEmailApi = async (
-  data: EmailConfirmationData,
-): Promise<ConfirmEmailResponse> => {
-  try {
-    const response = await api.post<
-      EmailConfirmationData,
-      ConfirmEmailResponse
-    >(AUTH_API.EMAIL_CONFIRM, data);
-    const result = confirmEmailResponseSchema.parse(response.data);
-    return result;
-  } catch (error: unknown) {
-    throw error;
-  }
-};
+// export const confirmEmailApi = async (
+//   data: EmailConfirmationData,
+// ): Promise<ConfirmEmailResponse> => {
+//   try {
+//     const response = await api.post<
+//       EmailConfirmationData,
+//       ConfirmEmailResponse
+//     >(AUTH_API.EMAIL_CONFIRM, data);
+//     return response.data;
+//   } catch (error: unknown) {
+//     throw error;
+//   }
+// };
 
 /**
  * Send password reset email
@@ -148,8 +208,7 @@ export const resetPasswordApi = async (
       ResetPasswordFormData,
       ResetPasswordResponse
     >(AUTH_API.RESET_PASSWORD, data);
-    const result = resetPasswordResponseSchema.parse(response.data);
-    return result;
+    return response.data;
   } catch (error: unknown) {
     throw error;
   }
@@ -166,8 +225,7 @@ export const updatePasswordApi = async (
       { newPassword: string },
       UpdatePasswordResponse
     >(AUTH_API.UPDATE_PASSWORD, { newPassword: data.newPassword });
-    const result = updatePasswordResponseSchema.parse(response.data);
-    return result;
+    return response.data;
   } catch (error: unknown) {
     throw error;
   }

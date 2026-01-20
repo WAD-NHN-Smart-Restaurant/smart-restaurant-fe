@@ -1,15 +1,14 @@
-import { EmailConfirmationData } from "@/types/auth-type";
 import { useMutation, UseMutationOptions } from "@tanstack/react-query";
-import { confirmEmailApi } from "@/api/auth-api";
+import { resendConfirmationApi } from "@/api/auth-api";
 
-export function useConfirmEmail(
+export function useResendConfirmEmail(
   options?: Omit<
-    UseMutationOptions<unknown, Error, EmailConfirmationData>,
+    UseMutationOptions<{ success: boolean; message: string }, Error, string>,
     "mutationFn"
   >,
 ) {
   return useMutation({
-    mutationFn: confirmEmailApi,
+    mutationFn: (email: string) => resendConfirmationApi(email),
     ...options,
   });
 }

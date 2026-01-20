@@ -44,11 +44,13 @@ export interface GuestMenuItem {
   description?: string;
   price: number;
   prepTimeMinutes: number;
-  status: "available" | "unavailable" | "out_of_stock";
+  status: "available" | "unavailable" | "sold_out";
   isChefRecommended: boolean;
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+  popularity?: number;
+  categoryName?: string;
   menuItemPhotos: GuestMenuItemPhoto[];
   menuItemModifierGroups: GuestMenuItemModifierGroup[];
 }
@@ -56,10 +58,10 @@ export interface GuestMenuItem {
 export interface GuestCategory {
   id: string;
   name: string;
+  description?: string;
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
-  description?: string;
   displayOrder: number;
   restaurantId: string;
   menuItems: GuestMenuItem[];
@@ -69,6 +71,9 @@ export interface GuestCategory {
 export interface GuestMenuQueryParams {
   table?: string;
   search?: string;
+  chefRecommended?: boolean;
+  sortBy?: "name" | "price" | "popularity";
+  sortOrder?: "asc" | "desc";
   categoryId?: string;
   page?: number;
   limit?: number;
@@ -85,7 +90,7 @@ export interface GuestMenuPagination {
 export interface GuestMenuResponse {
   success: boolean;
   data: {
-    items: GuestCategory[];
+    items: GuestMenuItem[];
     pagination: GuestMenuPagination;
   };
 }

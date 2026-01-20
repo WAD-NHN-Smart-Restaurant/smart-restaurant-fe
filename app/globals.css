@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -53,7 +54,7 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.556 0.178 21.045); /* #e74c3c - main theme color */
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -72,7 +73,7 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.556 0.178 21.045); /* #e74c3c - main theme color */
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
@@ -88,8 +89,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.645 0.18 21.045); /* Lighter #e74c3c for dark mode */
+  --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -107,7 +108,9 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(
+    0.645 0.18 21.045
+  ); /* Lighter #e74c3c for dark mode */
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
@@ -121,5 +124,39 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Print styles for bill preview */
+@media print {
+  /* Hide everything except bill content */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the bill preview content */
+  [data-print-content="true"],
+  [data-print-content="true"] * {
+    visibility: visible;
+  }
+
+  [data-print-content="true"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white;
+  }
+
+  /* Hide buttons and nav elements during print */
+  button,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* Optimize print layout */
+  @page {
+    margin: 1cm;
+    size: auto;
   }
 }
