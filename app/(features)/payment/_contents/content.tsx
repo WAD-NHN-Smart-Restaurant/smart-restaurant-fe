@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getCurrentOrder } from "@/api/order-api";
+import { getCurrentOrder, requestBill } from "@/api/order-api";
 import {
   InitiatePaymentResponse,
   initiatePayment,
@@ -101,24 +101,69 @@ const computeOrderTotals = (items: OrderItem[]) => {
 
 type RawOrder = {
   id: string;
-  tableId: string;
+  tableId?: string;
+  table_id?: string;
   status: string;
   guestName?: string | null;
+  guest_name?: string | null;
   specialRequest?: string | null;
+  special_request?: string | null;
   totalAmount?: number | null;
+  total_amount?: number | null;
   createdAt: string;
+  created_at?: string;
   orderItems?: Array<{
     id: string;
-    menuItemId: string;
+    menuItemId?: string;
+    menu_item_id?: string;
     menuItemName?: string | null;
+    menu_item_name?: string | null;
     quantity: number;
-    unitPrice: number;
+    unitPrice?: number;
+    unit_price?: number;
     specialRequest?: string | null;
+    special_request?: string | null;
     status: string;
     orderItemOptions?: Array<{
       id: string;
       optionName?: string | null;
-      priceAtTime: number;
+      option_name?: string | null;
+      priceAtTime?: number;
+      price_at_time?: number;
+    }>;
+    order_item_options?: Array<{
+      id: string;
+      optionName?: string | null;
+      option_name?: string | null;
+      priceAtTime?: number;
+      price_at_time?: number;
+    }>;
+  }>;
+  order_items?: Array<{
+    id: string;
+    menuItemId?: string;
+    menu_item_id?: string;
+    menuItemName?: string | null;
+    menu_item_name?: string | null;
+    quantity: number;
+    unitPrice?: number;
+    unit_price?: number;
+    specialRequest?: string | null;
+    special_request?: string | null;
+    status: string;
+    orderItemOptions?: Array<{
+      id: string;
+      optionName?: string | null;
+      option_name?: string | null;
+      priceAtTime?: number;
+      price_at_time?: number;
+    }>;
+    order_item_options?: Array<{
+      id: string;
+      optionName?: string | null;
+      option_name?: string | null;
+      priceAtTime?: number;
+      price_at_time?: number;
     }>;
   }>;
 };
@@ -158,6 +203,7 @@ export function PaymentContent() {
 
   // Discount state - will be set from payment data instead of user input
   const [discountRate, setDiscountRate] = useState<number>(0);
+  const [isRequestingBill, setIsRequestingBill] = useState(false);
 
   // Sync discount fields from payment data (camelCase from backend)
   useEffect(() => {
@@ -233,103 +279,261 @@ export function PaymentContent() {
     }
   }, []);
 
-  // Fetch order
-  useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+  // Helper function to fetch and normalize order with retry logic
+  const fetchAndNormalizeOrder = async (
+    retryCount: number = 0,
+    maxRetries: number = 3,
+  ): Promise<Order | null> => {
+    try {
+      console.log(
+        `[Order Fetch] Attempt ${retryCount + 1}/${maxRetries + 1}: Fetching order...`,
+      );
+      const result = await getCurrentOrder();
+      console.log("[Order Fetch] Raw response:", result);
 
-        const result = await getCurrentOrder();
-        const controller = result?.data;
-        const raw = controller?.data as RawOrder | undefined;
+      // Handle both response formats
+      const successFlag = result?.success || result?.data?.status;
+      const controller = result?.data;
+      const raw = (controller?.data || result) as RawOrder;
 
-        if (!result?.success || !controller?.status || !raw) {
-          setError("No active order found");
-          setOrder(null);
-          return;
+      console.log("[Order Fetch] Response structure:", {
+        hasSuccess: !!result?.success,
+        hasData: !!result?.data,
+        hasStatus: !!controller?.status,
+        rawKeys: raw ? Object.keys(raw).slice(0, 10) : "N/A",
+      });
+
+      if (successFlag && raw) {
+        console.log("[Order Fetch] Response is success, parsing order data...");
+        console.log("[Order Fetch] Order data:", {
+          id: raw.id,
+          status: raw.status,
+          itemCount: (raw.orderItems || raw.order_items || []).length,
+          totalAmount: raw.totalAmount || raw.total_amount,
+        });
+
+        // Accept both 'active' and 'payment_pending' statuses
+        const validStatuses = ["active", "payment_pending", "served"];
+        if (!validStatuses.includes(raw.status)) {
+          console.warn(
+            "[Order Fetch] Order status not valid for payment:",
+            raw.status,
+          );
+          return null;
         }
+
+        // Normalize with both camelCase and snake_case field support
+        const items = raw.orderItems || raw.order_items || [];
+        console.log("[Order Fetch] Processing", items.length, "items");
 
         const normalized: Order = {
           id: raw.id,
-          tableId: raw.tableId,
+          tableId: raw.tableId || raw.table_id || "",
           status: (raw.status as Order["status"]) || "active",
-          guestName: raw.guestName ?? undefined,
-          notes: raw.specialRequest ?? undefined,
-          totalAmount: raw.totalAmount ?? 0,
-          createdAt: raw.createdAt,
-          orderItems: (raw.orderItems || []).map((item) => ({
+          guestName: raw.guestName || raw.guest_name || undefined,
+          notes: raw.specialRequest || raw.special_request || undefined,
+          totalAmount: raw.totalAmount || raw.total_amount || 0,
+          createdAt: raw.createdAt || raw.created_at || "",
+          orderItems: items.map((item) => ({
             id: item.id,
-            menuItemId: item.menuItemId,
-            menuItemName: item.menuItemName ?? undefined,
+            menuItemId: item.menuItemId || item.menu_item_id || "",
+            menuItemName: item.menuItemName || item.menu_item_name || "Item",
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            specialRequest: item.specialRequest ?? undefined,
+            unitPrice: item.unitPrice || item.unit_price || 0,
+            specialRequest:
+              item.specialRequest || item.special_request || undefined,
             status: (item.status as OrderItem["status"]) || "active",
-            options: (item.orderItemOptions || []).map((opt) => ({
+            options: (
+              item.orderItemOptions ||
+              item.order_item_options ||
+              []
+            ).map((opt) => ({
               id: opt.id,
-              optionName: opt.optionName ?? undefined,
-              priceAtTime: opt.priceAtTime,
+              optionName: opt.optionName || opt.option_name || "Option",
+              priceAtTime: opt.priceAtTime || opt.price_at_time || 0,
             })),
           })),
         };
 
-        setOrder(normalized);
+        console.log("[Order Fetch] ✅ Order normalized successfully:", {
+          orderId: normalized.id,
+          itemsCount: normalized.orderItems.length,
+          total: normalized.totalAmount,
+        });
 
-        // Try to get payment by order ID (will exist if customer has requested bill)
-        try {
-          const paymentResponse = await getPaymentByOrderId(raw.id);
-          console.log("Raw payment response:", paymentResponse);
-          console.log("paymentResponse.data:", paymentResponse?.data);
+        return normalized;
+      } else {
+        console.warn("[Order Fetch] Response structure invalid:", {
+          hasSuccess: !!result?.success,
+          hasController: !!controller,
+          hasRaw: !!raw,
+          resultKeys: result ? Object.keys(result) : "N/A",
+        });
 
-          // Handle both response formats: { success: true, data: { ... } } and { status: true, data: { ... } }
-          const isSuccess = (paymentResponse?.success ||
-            paymentResponse?.data?.status) as boolean;
-          const rawPayment =
-            paymentResponse?.data?.data || paymentResponse?.data;
-          const paymentData: PaymentStatusResponse = {
-            ...(rawPayment || {}),
-            discountRate:
-              rawPayment?.discountRate ?? rawPayment?.discountRate ?? 0,
-            discountAmount:
-              rawPayment?.discountAmount ?? rawPayment?.discountAmount ?? 0,
-          } as PaymentStatusResponse;
+        // Retry logic
+        if (retryCount < maxRetries) {
+          const delayMs = Math.min(1000 * Math.pow(2, retryCount), 5000);
+          console.log(
+            `[Order Fetch] Retrying in ${delayMs}ms (attempt ${retryCount + 1})...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          return fetchAndNormalizeOrder(retryCount + 1, maxRetries);
+        }
+      }
+    } catch (err) {
+      console.error(
+        `[Order Fetch] Attempt ${retryCount + 1} failed:`,
+        getErrorMessage(err),
+      );
 
-          console.log("Extracted paymentData:", paymentData);
-          console.log("paymentData keys:", Object.keys(paymentData || {}));
+      // Retry on error
+      if (retryCount < maxRetries) {
+        const delayMs = Math.min(1000 * Math.pow(2, retryCount), 5000);
+        console.log(
+          `[Order Fetch] Retrying in ${delayMs}ms after error (attempt ${retryCount + 1})...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        return fetchAndNormalizeOrder(retryCount + 1, maxRetries);
+      }
+    }
+    console.error("[Order Fetch] ❌ Failed to fetch order after all retries");
+    return null;
+  };
 
-          if (isSuccess && paymentData?.status) {
-            console.log("Initial payment found:", {
-              status: paymentData.status,
-              discountRate: paymentData.discountRate,
-              discountAmount: paymentData.discountAmount,
-              fullPayment: paymentData,
-            });
-            setPaymentId(paymentData.id);
-            setPaymentStatus(paymentData.status);
-            setPaymentData(paymentData);
+  // Fetch order on mount
+  useEffect(() => {
+    const initializePayment = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-            // If payment status is 'created', show waiting message
-            if (paymentData.status === "created") {
-              console.log("Payment is created, showing waiting screen");
-              setIsWaitingForBill(true);
-            } else if (paymentData.status === "accepted") {
-              console.log(
-                "Payment already accepted, discountRate:",
-                paymentData.discountRate,
-                "discountAmount:",
-                paymentData.discountAmount,
-              );
-              setDiscountRate(paymentData.discountRate || 0);
-              setIsWaitingForBill(false);
+        console.log("[Payment Init] Starting payment page initialization...");
+
+        const savedOrderId =
+          typeof window !== "undefined"
+            ? sessionStorage.getItem("pending_payment_order_id")
+            : null;
+
+        console.log(
+          "[Payment Init] Saved order ID from session:",
+          savedOrderId,
+        );
+
+        // Try to fetch order with retry logic
+        console.log("[Payment Init] Attempting to fetch order...");
+        const fetchedOrder = await fetchAndNormalizeOrder(0, 3);
+
+        if (fetchedOrder) {
+          console.log("[Payment Init] ✅ Order fetched successfully");
+          setOrder(fetchedOrder);
+
+          // Try to fetch payment for this order
+          try {
+            console.log(
+              "[Payment Init] Fetching payment for order:",
+              fetchedOrder.id,
+            );
+            const paymentResponse = await getPaymentByOrderId(fetchedOrder.id);
+            const isSuccess = (paymentResponse?.success ||
+              paymentResponse?.data?.status) as boolean;
+            const rawPayment =
+              paymentResponse?.data?.data || paymentResponse?.data;
+            const paymentData: PaymentStatusResponse = {
+              ...(rawPayment || {}),
+              discountRate:
+                rawPayment?.discountRate ?? rawPayment?.discountRate ?? 0,
+              discountAmount: rawPayment?.discountAmount ?? 0,
+            } as PaymentStatusResponse;
+
+            if (isSuccess && paymentData?.status) {
+              console.log("[Payment Init] ✅ Payment found:", paymentData);
+              setPaymentId(paymentData.id);
+              setPaymentStatus(paymentData.status);
+              setPaymentData(paymentData);
+
+              if (paymentData.status === "created") {
+                setIsWaitingForBill(true);
+              } else if (paymentData.status === "accepted") {
+                setDiscountRate(paymentData.discountRate || 0);
+                setIsWaitingForBill(false);
+              }
             }
+          } catch (paymentErr) {
+            console.log(
+              "[Payment Init] Payment not found yet, will poll:",
+              getErrorMessage(paymentErr),
+            );
           }
-        } catch (err) {
-          // Payment doesn't exist yet or error - this is normal, will be created on request bill
-          console.log("No payment found yet for order:", getErrorMessage(err));
+        } else if (savedOrderId) {
+          // Order fetch failed but we have savedOrderId - try to load payment first
+          console.log(
+            "[Payment Init] Order fetch failed, trying with saved order ID:",
+            savedOrderId,
+          );
+          try {
+            const paymentResponse = await getPaymentByOrderId(savedOrderId);
+            const isSuccess = (paymentResponse?.success ||
+              paymentResponse?.data?.status) as boolean;
+            const rawPayment =
+              paymentResponse?.data?.data || paymentResponse?.data;
+            const paymentData: PaymentStatusResponse = {
+              ...(rawPayment || {}),
+              discountRate:
+                rawPayment?.discountRate ?? rawPayment?.discountRate ?? 0,
+              discountAmount: rawPayment?.discountAmount ?? 0,
+            } as PaymentStatusResponse;
+
+            if (isSuccess && paymentData?.status) {
+              console.log(
+                "[Payment Init] ✅ Payment loaded via saved order ID:",
+                paymentData,
+              );
+              setPaymentId(paymentData.id);
+              setPaymentStatus(paymentData.status);
+              setPaymentData(paymentData);
+
+              if (paymentData.status === "created") {
+                setIsWaitingForBill(true);
+              } else if (paymentData.status === "accepted") {
+                setDiscountRate(paymentData.discountRate || 0);
+                setIsWaitingForBill(false);
+              }
+
+              // Retry order fetch multiple times
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const delay = 1000 * Math.pow(2, attempt);
+                console.log(
+                  `[Payment Init] Retrying order fetch in ${delay}ms (attempt ${attempt + 1}/3)...`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, delay));
+
+                const retryOrder = await fetchAndNormalizeOrder(0, 1);
+                if (retryOrder) {
+                  console.log("[Payment Init] ✅ Order loaded on retry");
+                  setOrder(retryOrder);
+                  break;
+                }
+              }
+            }
+          } catch (err) {
+            console.error(
+              "[Payment Init] Failed to load payment via saved order ID:",
+              getErrorMessage(err),
+            );
+            setError("Failed to load bill information. Please refresh.");
+          }
+        } else {
+          console.error(
+            "[Payment Init] ❌ No order data and no saved order ID",
+          );
+          setError(
+            "Unable to load order. Please request bill again from the menu.",
+          );
+          setOrder(null);
         }
       } catch (err: unknown) {
-        const message = getErrorMessage(err) || "Failed to load order";
+        const message = getErrorMessage(err) || "Failed to initialize payment";
+        console.error("[Payment Init] Error:", message);
         setError(message);
         setOrder(null);
       } finally {
@@ -337,7 +541,8 @@ export function PaymentContent() {
       }
     };
 
-    fetchOrder();
+    initializePayment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll for payment status when waiting for bill
@@ -346,11 +551,15 @@ export function PaymentContent() {
       return;
     }
 
+    let pollCount = 0;
     const pollPaymentStatus = async () => {
+      pollCount++;
       try {
+        console.log(
+          `[Payment Poll] Poll #${pollCount}: Checking payment status...`,
+        );
         const response = await getPaymentStatus(paymentId);
-        console.log("Raw poll response:", response);
-        console.log("response.data:", response?.data);
+        console.log(`[Payment Poll] Poll #${pollCount} response:`, response);
 
         // Handle both response formats: { success: true, data: { ... } } and { status: true, data: { ... } }
         const isSuccess = (response?.success ||
@@ -364,46 +573,70 @@ export function PaymentContent() {
             rawPayment?.discountAmount ?? rawPayment?.discountAmount ?? 0,
         } as PaymentStatusResponse;
 
-        console.log("Extracted polling paymentData:", paymentData);
-        console.log("paymentData keys:", Object.keys(paymentData || {}));
+        console.log(`[Payment Poll] Poll #${pollCount} parsed data:`, {
+          status: paymentData?.status,
+          discountRate: paymentData?.discountRate,
+          discountAmount: paymentData?.discountAmount,
+        });
 
         if (isSuccess && paymentData?.status) {
-          console.log("Payment status updated:", {
-            status: paymentData.status,
-            discountRate: paymentData.discountRate,
-            discountAmount: paymentData.discountAmount,
-            fullPayment: paymentData,
-          });
+          console.log(
+            `[Payment Poll] ✅ Poll #${pollCount}: Status updated to`,
+            paymentData.status,
+          );
           setPaymentStatus(paymentData.status);
           setPaymentData(paymentData);
 
           // When status becomes 'accepted', it means waiter has set discount
           if (paymentData.status === "accepted") {
             console.log(
-              "Payment accepted! discountRate:",
-              paymentData.discountRate,
-              "discountAmount:",
-              paymentData.discountAmount,
+              `[Payment Poll] 🎉 Payment accepted! Discount: ${paymentData.discountRate}% = $${paymentData.discountAmount}`,
             );
             setDiscountRate(paymentData.discountRate || 0);
             setIsWaitingForBill(false);
-            // The payment form will now be displayed automatically
-            // because isWaitingForBill is false and showBillPreview is false
+
+            // Refetch order to ensure we have latest order items
+            if (!order || order.orderItems.length === 0) {
+              console.log(
+                "[Payment Poll] Order empty or missing, refetching...",
+              );
+              // Aggressive retry for order
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const delay = 1000 * Math.pow(2, attempt);
+                console.log(
+                  `[Payment Poll] Retry order fetch in ${delay}ms (attempt ${attempt + 1}/3)...`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, delay));
+
+                const fetchedOrder = await fetchAndNormalizeOrder(0, 2);
+                if (fetchedOrder) {
+                  console.log("[Payment Poll] ✅ Order refetched successfully");
+                  setOrder(fetchedOrder);
+                  break;
+                }
+              }
+            }
           }
         }
       } catch (err) {
-        console.error("Error polling payment status:", getErrorMessage(err));
+        console.error(
+          `[Payment Poll] Poll #${pollCount} error:`,
+          getErrorMessage(err),
+        );
       }
     };
 
     // Poll every 2 seconds
+    console.log("[Payment Poll] Starting payment status polling...");
     pollingIntervalRef.current = setInterval(pollPaymentStatus, 2000);
 
     return () => {
       if (pollingIntervalRef.current) {
+        console.log("[Payment Poll] Stopping polling");
         clearInterval(pollingIntervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentId, paymentStatus]);
 
   // If returning from checkout with paid flag, show bill preview
@@ -482,6 +715,53 @@ export function PaymentContent() {
       console.error("Failed to restore order snapshot", e);
     }
   }, [showBillPreview, order]);
+
+  // Request bill - creates initial payment record with status='created'
+  const handleRequestBill = async () => {
+    try {
+      setIsRequestingBill(true);
+      setError(null);
+
+      if (!order?.id) {
+        setError("Order not found");
+        return;
+      }
+
+      // Call API to request bill (creates payment with status='created')
+      const response = await requestBill(order.id);
+      console.log("Request bill response:", response);
+
+      const isSuccess = (response?.success ||
+        response?.data?.status) as boolean;
+      const rawPayment = (response?.data?.data || response?.data) as Record<
+        string,
+        unknown
+      >;
+      const paymentData: PaymentStatusResponse = {
+        ...(rawPayment || {}),
+        discountRate: ((rawPayment?.discountRate as number) ?? 0) as number,
+        discountAmount: ((rawPayment?.discountAmount as number) ?? 0) as number,
+      } as PaymentStatusResponse;
+
+      if (isSuccess && paymentData?.id) {
+        console.log("Bill request successful, payment created:", {
+          paymentId: paymentData.id,
+          status: paymentData.status,
+        });
+        setPaymentId(paymentData.id);
+        setPaymentStatus("created");
+        setPaymentData(paymentData);
+        setIsWaitingForBill(true);
+      } else {
+        setError(response?.data?.message || "Failed to request bill");
+      }
+    } catch (err: unknown) {
+      const message = getErrorMessage(err) || "Error requesting bill";
+      setError(message);
+    } finally {
+      setIsRequestingBill(false);
+    }
+  };
 
   // Payment handlers
   const handlePayAtCounter = async () => {
@@ -680,18 +960,7 @@ export function PaymentContent() {
     );
   }
 
-  if (!showBillPreview && (error || !order)) {
-    return (
-      <MobileLayout>
-        <MobileHeader title="Your Bill" tableNumber={tableNumber} />
-        <div style={{ padding: "20px", textAlign: "center", color: "#c62828" }}>
-          {error || "Order not found"}
-        </div>
-      </MobileLayout>
-    );
-  }
-
-  // Show waiting message when bill is being prepared
+  // Show waiting message when bill is being prepared (CHECK FIRST)
   if (isWaitingForBill) {
     return (
       <MobileLayout showBottomNav={false}>
@@ -765,9 +1034,22 @@ export function PaymentContent() {
             className="waiting-text"
             style={{ color: "#667085", fontSize: "14px", lineHeight: "1.5" }}
           >
-            The system has sent a bill request to the staff member, please wait
-            a moment.
+            The system has sent a bill creation request to the staff member,
+            please wait a moment.
           </div>
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  // Check for errors or missing order AFTER checking isWaitingForBill
+  // But if we have a payment ID, we can continue even without order details
+  if (!showBillPreview && !paymentId && (error || !order)) {
+    return (
+      <MobileLayout>
+        <MobileHeader title="Your Bill" tableNumber={tableNumber} />
+        <div style={{ padding: "20px", textAlign: "center", color: "#c62828" }}>
+          {error || "Order not found"}
         </div>
       </MobileLayout>
     );
@@ -1305,172 +1587,199 @@ export function PaymentContent() {
           </div>
         </div>
 
-        {/* Payment Method */}
-        <div style={{ marginTop: "24px" }}>
-          <div
+        {/* Show "Request Bill" button when payment not yet created */}
+        {!paymentId ? (
+          <button
+            onClick={handleRequestBill}
+            disabled={isRequestingBill}
             style={{
-              fontSize: "16px",
-              fontWeight: 800,
-              color: "#1f3b57",
-              marginBottom: "12px",
-            }}
-          >
-            Payment Method
-          </div>
-
-          {/* Stripe */}
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              padding: "14px 16px",
-              background: selectedMethod === "stripe" ? "#fff7ed" : "white",
-              border:
-                selectedMethod === "stripe"
-                  ? "2px solid #e74c3c"
-                  : "1px solid #e5e7eb",
+              marginTop: "24px",
+              width: "100%",
+              padding: "14px 20px",
+              background: "#e74c3c",
+              color: "white",
+              border: "none",
               borderRadius: "12px",
-              marginBottom: "10px",
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="radio"
-              name="method"
-              value="stripe"
-              checked={selectedMethod === "stripe"}
-              onChange={() => setSelectedMethod("stripe")}
-              style={{ marginRight: "12px", cursor: "pointer" }}
-            />
-            <div
-              style={{
-                width: "28px",
-                height: "28px",
-                background: "white",
-                border: "1px solid #e5e7eb",
-                borderRadius: "6px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginRight: "10px",
-                fontSize: "18px",
-              }}
-            >
-              💳
-            </div>
-            <span style={{ fontWeight: 600 }}>Credit/Debit Card (Stripe)</span>
-          </label>
-
-          {/* Pay at Counter */}
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              padding: "14px 16px",
-              background: selectedMethod === "cash" ? "#fff7ed" : "white",
-              border:
-                selectedMethod === "cash"
-                  ? "2px solid #e74c3c"
-                  : "1px solid #e5e7eb",
-              borderRadius: "12px",
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="radio"
-              name="method"
-              value="cash"
-              checked={selectedMethod === "cash"}
-              onChange={() => setSelectedMethod("cash")}
-              style={{ marginRight: "12px", cursor: "pointer" }}
-            />
-            <div
-              style={{
-                width: "28px",
-                height: "28px",
-                background: "#1f9254",
-                borderRadius: "6px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginRight: "10px",
-                fontSize: "18px",
-              }}
-            >
-              💵
-            </div>
-            <span style={{ fontWeight: 600 }}>Pay at Counter</span>
-          </label>
-        </div>
-
-        {/* Add a Tip */}
-        <div style={{ marginTop: "24px" }}>
-          <div
-            style={{
-              fontSize: "16px",
               fontWeight: 800,
-              color: "#1f3b57",
-              marginBottom: "12px",
+              fontSize: "16px",
+              cursor: isRequestingBill ? "not-allowed" : "pointer",
+              opacity: isRequestingBill ? 0.6 : 1,
             }}
           >
-            Add a Tip
-          </div>
-
-          <div style={{ display: "flex", gap: "10px" }}>
-            {["10", "15", "20", "custom"].map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setTipMode(mode as typeof tipMode);
-                  if (mode !== "custom") setCustomTipInput("");
-                }}
+            {isRequestingBill ? "Requesting Bill..." : "Request Bill"}
+          </button>
+        ) : (
+          <>
+            {/* Payment Method */}
+            <div style={{ marginTop: "24px" }}>
+              <div
                 style={{
-                  flex: 1,
-                  padding: "12px",
-                  background: tipMode === mode ? "#e74c3c" : "white",
-                  color: tipMode === mode ? "white" : "#1f3b57",
-                  border: tipMode === mode ? "none" : "1px solid #e5e7eb",
-                  borderRadius: "10px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontSize: "14px",
+                  fontSize: "16px",
+                  fontWeight: 800,
+                  color: "#1f3b57",
+                  marginBottom: "12px",
                 }}
               >
-                {mode === "custom" ? "Custom" : `${mode}%`}
-              </button>
-            ))}
-          </div>
+                Payment Method
+              </div>
 
-          {tipMode === "custom" && (
-            <input
-              type="number"
-              placeholder="Enter tip %"
-              value={customTipInput}
-              onChange={(e) => setCustomTipInput(e.target.value)}
-              style={{
-                marginTop: "10px",
-                width: "100%",
-                padding: "12px",
-                border: "1px solid #e5e7eb",
-                borderRadius: "10px",
-                fontSize: "14px",
-              }}
-            />
-          )}
+              {/* Stripe */}
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  background: selectedMethod === "stripe" ? "#fff7ed" : "white",
+                  border:
+                    selectedMethod === "stripe"
+                      ? "2px solid #e74c3c"
+                      : "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  marginBottom: "10px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="method"
+                  value="stripe"
+                  checked={selectedMethod === "stripe"}
+                  onChange={() => setSelectedMethod("stripe")}
+                  style={{ marginRight: "12px", cursor: "pointer" }}
+                />
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    background: "white",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "10px",
+                    fontSize: "18px",
+                  }}
+                >
+                  💳
+                </div>
+                <span style={{ fontWeight: 600 }}>
+                  Credit/Debit Card (Stripe)
+                </span>
+              </label>
 
-          <div
-            style={{
-              marginTop: "12px",
-              fontSize: "14px",
-              color: "#667085",
-            }}
-          >
-            Tip amount:{" "}
-            <span style={{ fontWeight: 700, color: "#1f3b57" }}>
-              {formatPrice(tipAmount)}
-            </span>
-          </div>
-        </div>
+              {/* Pay at Counter */}
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  background: selectedMethod === "cash" ? "#fff7ed" : "white",
+                  border:
+                    selectedMethod === "cash"
+                      ? "2px solid #e74c3c"
+                      : "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="method"
+                  value="cash"
+                  checked={selectedMethod === "cash"}
+                  onChange={() => setSelectedMethod("cash")}
+                  style={{ marginRight: "12px", cursor: "pointer" }}
+                />
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    background: "#1f9254",
+                    borderRadius: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "10px",
+                    fontSize: "18px",
+                  }}
+                >
+                  💵
+                </div>
+                <span style={{ fontWeight: 600 }}>Pay at Counter</span>
+              </label>
+            </div>
+
+            {/* Add a Tip */}
+            <div style={{ marginTop: "24px" }}>
+              <div
+                style={{
+                  fontSize: "16px",
+                  fontWeight: 800,
+                  color: "#1f3b57",
+                  marginBottom: "12px",
+                }}
+              >
+                Add a Tip
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                {["10", "15", "20", "custom"].map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => {
+                      setTipMode(mode as typeof tipMode);
+                      if (mode !== "custom") setCustomTipInput("");
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "12px",
+                      background: tipMode === mode ? "#e74c3c" : "white",
+                      color: tipMode === mode ? "white" : "#1f3b57",
+                      border: tipMode === mode ? "none" : "1px solid #e5e7eb",
+                      borderRadius: "10px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {mode === "custom" ? "Custom" : `${mode}%`}
+                  </button>
+                ))}
+              </div>
+
+              {tipMode === "custom" && (
+                <input
+                  type="number"
+                  placeholder="Enter tip %"
+                  value={customTipInput}
+                  onChange={(e) => setCustomTipInput(e.target.value)}
+                  style={{
+                    marginTop: "10px",
+                    width: "100%",
+                    padding: "12px",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                  }}
+                />
+              )}
+
+              <div
+                style={{
+                  marginTop: "12px",
+                  fontSize: "14px",
+                  color: "#667085",
+                }}
+              >
+                Tip amount:{" "}
+                <span style={{ fontWeight: 700, color: "#1f3b57" }}>
+                  {formatPrice(tipAmount)}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -1489,47 +1798,49 @@ export function PaymentContent() {
         )}
       </div>
 
-      {/* Pay Button - Inside MobileLayout but above bottom nav area */}
-      <div
-        style={{
-          padding: "12px 16px 16px",
-          background: "white",
-          borderTop: "1px solid #e5e7eb",
-          boxShadow: "0 -4px 12px rgba(0,0,0,0.05)",
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        {(() => {
-          // Determine if Pay button should be disabled
-          const isProcessing = isPayingCash || isPayingOnline;
-          const isDisabled = isProcessing;
+      {/* Pay Button - only show after bill request (paymentId exists) */}
+      {paymentId && (
+        <div
+          style={{
+            padding: "12px 16px 16px",
+            background: "white",
+            borderTop: "1px solid #e5e7eb",
+            boxShadow: "0 -4px 12px rgba(0,0,0,0.05)",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          {(() => {
+            // Determine if Pay button should be disabled
+            const isProcessing = isPayingCash || isPayingOnline;
+            const isDisabled = isProcessing;
 
-          return (
-            <button
-              onClick={handlePay}
-              disabled={isDisabled}
-              style={{
-                width: "100%",
-                maxWidth: "440px",
-                padding: "14px 20px",
-                background: "#e74c3c",
-                color: "white",
-                border: "none",
-                borderRadius: "12px",
-                fontWeight: 800,
-                fontSize: "16px",
-                cursor: isDisabled ? "not-allowed" : "pointer",
-                opacity: isDisabled ? 0.6 : 1,
-              }}
-            >
-              {isPayingCash || isPayingOnline
-                ? "Processing..."
-                : `Pay ${formatPrice(grandTotal)}`}
-            </button>
-          );
-        })()}
-      </div>
+            return (
+              <button
+                onClick={handlePay}
+                disabled={isDisabled}
+                style={{
+                  width: "100%",
+                  maxWidth: "440px",
+                  padding: "14px 20px",
+                  background: "#e74c3c",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "12px",
+                  fontWeight: 800,
+                  fontSize: "16px",
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                  opacity: isDisabled ? 0.6 : 1,
+                }}
+              >
+                {isPayingCash || isPayingOnline
+                  ? "Processing..."
+                  : `Pay ${formatPrice(grandTotal)}`}
+              </button>
+            );
+          })()}
+        </div>
+      )}
     </MobileLayout>
   );
 }

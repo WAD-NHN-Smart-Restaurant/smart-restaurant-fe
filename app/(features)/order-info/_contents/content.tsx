@@ -82,31 +82,6 @@ const computeOrderTotals = (items: OrderItem[]) => {
   }, 0);
 };
 
-// Raw response shape from backend for orders
-type RawOrder = {
-  id: string;
-  table_id: string;
-  status: string;
-  guest_name?: string | null;
-  notes?: string | null;
-  total_amount?: number | null;
-  created_at: string;
-  order_items?: Array<{
-    id: string;
-    menu_item_id: string;
-    menu_item_name?: string | null;
-    quantity: number;
-    unit_price: number;
-    special_request?: string | null;
-    status: string;
-    order_item_options?: Array<{
-      id: string;
-      option_name?: string | null;
-      price_at_time: number;
-    }>;
-  }>;
-};
-
 const ORDER_STATUS_BADGE: Record<
   string,
   { label: string; bg: string; color: string }
@@ -174,7 +149,6 @@ export function OrderInfoContent() {
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCallingWaiter, setIsCallingWaiter] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | undefined>(undefined);
@@ -563,53 +537,109 @@ export function OrderInfoContent() {
         setIsLoading(true);
         setError(null);
         const response = await getCurrentOrder();
-        // Response has structure: {success, data: {status, data: RawOrder}}
-        if (response?.success) {
-          const raw = response.data as any; // Backend may return camelCase or snake_case
-
-          // Handle both camelCase (new) and snake_case (old) responses
-          const orderItems = raw.orderItems || raw.order_items || [];
-
-          const mappedItems = orderItems.map((it: any) => ({
-            id: it.id,
-            menuItemId: it.menuItemId || it.menu_item_id,
-            menuItemName: it.menuItemName || it.menu_item_name || undefined,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice || it.unit_price,
-            specialRequest:
-              it.notes || it.specialRequest || it.special_request || undefined,
-            status: it.status,
-            options: (it.orderItemOptions || it.order_item_options || []).map(
-              (op: any) => ({
-                id: op.id,
-                optionName: op.optionName || op.option_name || undefined,
-                priceAtTime: op.priceAtTime || op.price_at_time,
-              }),
-            ),
-          }));
-
-          const mapped: Order = {
-            id: raw.id,
-            tableId: raw.tableId || raw.table_id,
-            status: raw.status,
-            guestName: raw.guestName || raw.guest_name || undefined,
-            notes:
-              raw.notes ||
-              raw.specialRequest ||
-              raw.special_request ||
-              undefined,
-            createdAt: raw.createdAt || raw.created_at,
-            orderItems: mappedItems,
-            // Prefer backend total_amount/totalAmount when provided, otherwise compute locally
-            totalAmount:
-              raw.totalAmount ??
-              raw.total_amount ??
-              computeOrderTotals(mappedItems),
-          };
-          setOrder(mapped);
-        } else {
+        if (!response?.success) {
           setError("Unable to load order information");
+          return;
         }
+
+        const raw = response.data as unknown;
+        const data = raw as {
+          id?: string;
+          tableId?: string;
+          table_id?: string;
+          status?: string;
+          guestName?: string | null;
+          guest_name?: string | null;
+          notes?: string | null;
+          specialRequest?: string | null;
+          special_request?: string | null;
+          totalAmount?: number | null;
+          total_amount?: number | null;
+          createdAt?: string;
+          created_at?: string;
+          orderItems?: unknown[];
+          order_items?: unknown[];
+        };
+
+        const orderItems = (data?.orderItems || data?.order_items) as unknown[];
+        const mappedItems = (orderItems || [])
+          .map((it: unknown) => {
+            const item = it as {
+              id?: string;
+              menuItemId?: string;
+              menu_item_id?: string;
+              menuItemName?: string | null;
+              menu_item_name?: string | null;
+              quantity?: number;
+              unitPrice?: number;
+              unit_price?: number;
+              notes?: string | null;
+              specialRequest?: string | null;
+              special_request?: string | null;
+              status?: string;
+              orderItemOptions?: unknown[];
+              order_item_options?: unknown[];
+            };
+
+            const opts = (item?.orderItemOptions ||
+              item?.order_item_options) as unknown[];
+
+            return {
+              id: (item?.id || "") as string,
+              menuItemId: (item?.menuItemId ||
+                item?.menu_item_id ||
+                "") as string,
+              menuItemName: (item?.menuItemName || item?.menu_item_name) as
+                | string
+                | undefined,
+              quantity: (item?.quantity || 0) as number,
+              unitPrice: (item?.unitPrice || item?.unit_price || 0) as number,
+              specialRequest: (item?.notes ||
+                item?.specialRequest ||
+                item?.special_request) as string | undefined,
+              status: (item?.status || "pending") as string,
+              options: (opts || [])
+                .map((op: unknown) => {
+                  const option = op as {
+                    id?: string;
+                    optionName?: string | null;
+                    option_name?: string | null;
+                    priceAtTime?: number;
+                    price_at_time?: number;
+                  };
+                  return {
+                    id: (option?.id || "") as string,
+                    optionName: (option?.optionName || option?.option_name) as
+                      | string
+                      | undefined,
+                    priceAtTime: (option?.priceAtTime ||
+                      option?.price_at_time ||
+                      0) as number,
+                  };
+                })
+                .filter(Boolean),
+            };
+          })
+          .filter(Boolean);
+
+        const mapped: Order = {
+          id: (data?.id || "") as string,
+          tableId: (data?.tableId || data?.table_id || "") as string,
+          status: (data?.status || "pending") as Order["status"],
+          guestName: (data?.guestName || data?.guest_name) as
+            | string
+            | undefined,
+          notes: (data?.notes ||
+            data?.specialRequest ||
+            data?.special_request) as string | undefined,
+          createdAt: (data?.createdAt || data?.created_at || "") as string,
+          orderItems: mappedItems,
+          totalAmount:
+            ((data?.totalAmount || data?.total_amount) as number) ||
+            computeOrderTotals(mappedItems),
+        };
+
+        setOrder(mapped);
       } catch (err: unknown) {
         const message =
           getErrorMessage(err) || "Error loading order information";
@@ -620,21 +650,26 @@ export function OrderInfoContent() {
     };
 
     fetchOrder();
-    // Socket updates handle live changes; no polling to avoid UI flicker
     return () => undefined;
   }, []);
 
   const handleRequestBill = async () => {
+    if (!order) {
+      setError("No active order found");
+      return;
+    }
+
     try {
-      setIsSubmitting(true);
-      setInfo(null);
       setError(null);
-      const response = await requestBill();
+      setInfo(null);
+      const response = await requestBill(order.id);
       if (response?.success && response.data?.status) {
-        // Update order status
-        if (order) {
-          setOrder({ ...order, status: "payment_pending" });
+        // Save order ID to session storage for payment page
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("pending_payment_order_id", order.id);
         }
+        // Update order status
+        setOrder({ ...order, status: "payment_pending" });
         // Auto-navigate to payment page where customer will see the waiting screen
         // and automatic updates when waiter accepts the payment
         router.push("/payment");
@@ -644,8 +679,6 @@ export function OrderInfoContent() {
     } catch (err: unknown) {
       const message = getErrorMessage(err) || "Error requesting bill";
       setError(message);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -681,6 +714,49 @@ export function OrderInfoContent() {
           }}
         >
           <p style={{ color: "#7f8c8d" }}>Loading order information...</p>
+        </div>
+        <BottomNav />
+      </MobileLayout>
+    );
+  }
+
+  // Show error if fetch failed
+  if (error && !order) {
+    return (
+      <MobileLayout>
+        <MobileHeader title="Your Orders" tableNumber={tableNumber} />
+        <div
+          style={{
+            paddingBottom: "80px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "60vh",
+            flexDirection: "column",
+            gap: "16px",
+          }}
+        >
+          <div style={{ textAlign: "center" }}>
+            <p
+              style={{
+                fontSize: "18px",
+                color: "#c62828",
+                marginBottom: "16px",
+              }}
+            >
+              ⚠️ {error}
+            </p>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#7f8c8d",
+                marginBottom: "16px",
+              }}
+            >
+              Please go back and try again or scan your QR code again
+            </p>
+            <Button onClick={() => router.push("/menu")}>Back to Menu</Button>
+          </div>
         </div>
         <BottomNav />
       </MobileLayout>
@@ -844,7 +920,7 @@ export function OrderInfoContent() {
                   : order?.status === "completed"
                     ? "Paid"
                     : !canRequestBill
-                      ? "Items Not Served"
+                      ? "Request Bill"
                       : "Request Bill"}
               </button>
               <button
