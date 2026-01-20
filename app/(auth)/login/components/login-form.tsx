@@ -2,7 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,9 +19,12 @@ import { LoginFormData } from "@/types/auth-type";
 import Link from "next/link";
 import { PATHS } from "@/data/path";
 import { GoogleSignInButton } from "./google-sign-in-button";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export const LoginForm = () => {
   const { login, isLoginLoading, loginError } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -33,6 +36,13 @@ export const LoginForm = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     await login(data);
+  };
+
+  const handleContinueAsGuest = () => {
+    // Preserve query parameters when navigating
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    const queryString = params.toString();
+    router.push(`${PATHS.MENU.INDEX}${queryString ? `?${queryString}` : ""}`);
   };
 
   return (
@@ -133,6 +143,17 @@ export const LoginForm = () => {
 
       {/* Google Sign In Button */}
       <GoogleSignInButton />
+
+      {/* Continue as Guest Button */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={handleContinueAsGuest}
+        disabled={isLoginLoading}
+      >
+        <User className="mr-2 h-4 w-4" />
+        Continue as Guest
+      </Button>
 
       {/* Footer */}
       <div className="text-center space-y-4">
