@@ -8,7 +8,7 @@ const ACCESS_TOKEN_KEY = "access_token";
 const GUEST_TOKEN_KEY = "guest_menu_token";
 const UNAUTHORIZED_STATUS = 401;
 // Normalize base URL to always include trailing /api
-const rawBase = (process.env.NEXT_PUBLIC_HOSTNAME || "http://localhost:3000")
+const rawBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001")
   .trim()
   .replace(/\/$/, "");
 const API_BASE_URL = rawBase.endsWith("/api") ? rawBase : `${rawBase}/api`;
@@ -79,11 +79,32 @@ axiosInstance.interceptors.response.use(
       // window.location.href = `${window.origin}/login`;
     }
 
-    // Always reject with a safe object to avoid undefined .data access
-    const safeErrorPayload = error?.response?.data ?? {
-      status: false,
-      message: error?.message || "Request failed",
-    };
+    // Always reject with a safe, serializable object to avoid undefined .data access
+    // and prevent [object Object] errors
+    let safeErrorPayload: { status: boolean; message: string; data?: unknown };
+
+    if (error.response?.data) {
+      // Server responded with error data
+      safeErrorPayload = {
+        status: false,
+        message:
+          error.response.data.message || error.message || "Request failed",
+        data: error.response.data,
+      };
+    } else if (error.request) {
+      // Request was made but no response received (network error, timeout, etc.)
+      safeErrorPayload = {
+        status: false,
+        message: error.message || "Network error - no response received",
+      };
+    } else {
+      // Something else happened
+      safeErrorPayload = {
+        status: false,
+        message: error.message || "Request failed",
+      };
+    }
+
     return Promise.reject(safeErrorPayload);
   },
 );

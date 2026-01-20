@@ -2,16 +2,66 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getCurrentOrder, cancelBillRequest } from "@/api/order-api";
+import { getCurrentOrder } from "@/api/order-api";
 import {
   InitiatePaymentResponse,
   initiatePayment,
   confirmPayment,
+  getPaymentStatus,
+  getPaymentByOrderId,
+  PaymentStatusResponse,
 } from "@/api/payment-api";
 import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
 import { formatPrice } from "@/utils/format";
 // import { useAuth } from "@/context/auth-context";
+
+// Helper function to extract error message from various error types
+const getErrorMessage = (err: unknown): string => {
+  if (!err) return "An unknown error occurred";
+
+  // If it's an axios error response
+  if (typeof err === "object" && err !== null) {
+    const error = err as Record<string, unknown>;
+
+    // Check for message property
+    if (typeof error.message === "string") {
+      return error.message;
+    }
+
+    // Check for nested data.message
+    if (
+      error.data &&
+      typeof error.data === "object" &&
+      "message" in error.data &&
+      typeof (error.data as Record<string, unknown>).message === "string"
+    ) {
+      return (error.data as Record<string, unknown>).message as string;
+    }
+
+    // Check for response.data.message
+    if (
+      error.response &&
+      typeof error.response === "object" &&
+      "data" in error.response
+    ) {
+      const responseData = (error.response as Record<string, unknown>).data;
+      if (
+        responseData &&
+        typeof responseData === "object" &&
+        "message" in responseData &&
+        typeof (responseData as Record<string, unknown>).message === "string"
+      ) {
+        return (responseData as Record<string, unknown>).message as string;
+      }
+    }
+  }
+
+  // Fallback to string conversion
+  if (typeof err === "string") return err;
+
+  return "An unexpected error occurred";
+};
 
 interface OrderItem {
   id: string;
@@ -90,6 +140,15 @@ export function PaymentContent() {
   >(null);
   const hasConfirmedPayment = useRef(false);
 
+  // Payment ID and status
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [paymentData, setPaymentData] = useState<PaymentStatusResponse | null>(
+    null,
+  );
+  const [isWaitingForBill, setIsWaitingForBill] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   // Payment UI state
   const [selectedMethod, setSelectedMethod] = useState<"stripe" | "cash">(
     "stripe",
@@ -97,11 +156,15 @@ export function PaymentContent() {
   const [tipMode, setTipMode] = useState<"10" | "15" | "20" | "custom">("15");
   const [customTipInput, setCustomTipInput] = useState<string>("");
 
-  // Discount state
-  const [discountType, setDiscountType] = useState<
-    "none" | "percentage" | "fixed"
-  >("none");
-  const [discountValue, setDiscountValue] = useState<string>("");
+  // Discount state - will be set from payment data instead of user input
+  const [discountRate, setDiscountRate] = useState<number>(0);
+
+  // Sync discount fields from payment data (camelCase from backend)
+  useEffect(() => {
+    if (paymentData?.discountRate !== undefined) {
+      setDiscountRate(paymentData.discountRate || 0);
+    }
+  }, [paymentData?.discountRate]);
 
   // Calculated totals
   const subtotal = useMemo(() => {
@@ -109,21 +172,31 @@ export function PaymentContent() {
     return computeOrderTotals(order.orderItems);
   }, [order]);
 
-  const discountAmount = useMemo(() => {
-    if (discountType === "none") return 0;
-    const value = Number(discountValue);
-    if (!Number.isFinite(value) || value <= 0) return 0;
-
-    if (discountType === "percentage") {
-      const percentage = Math.min(value, 100); // Cap at 100%
-      return Math.round(((subtotal * percentage) / 100) * 100) / 100;
+  // Use discount from payment data, not from user input
+  const calculatedDiscountAmount = useMemo(() => {
+    // Once payment data is loaded, use its discount amounts
+    // Backend returns camelCase: discountRate, discountAmount
+    if (paymentData && paymentData.discountRate) {
+      // Calculate discount amount from subtotal * discountRate if discountAmount is 0
+      if (paymentData.discountAmount > 0) {
+        return paymentData.discountAmount;
+      } else {
+        // Calculate: discount_amount = subtotal * (discountRate / 100)
+        return (
+          Math.round(((subtotal * paymentData.discountRate) / 100) * 100) / 100
+        );
+      }
     }
-    return Math.round(Math.min(value, subtotal) * 100) / 100; // Fixed amount, capped at subtotal
-  }, [discountType, discountValue, subtotal]);
+    return 0;
+  }, [paymentData, subtotal]);
 
+  // Display discount rate pulled from payment data when available
+  const displayDiscountRate = useMemo(() => {
+    return paymentData?.discountRate ?? discountRate ?? 0;
+  }, [paymentData?.discountRate, discountRate]);
   const subtotalAfterDiscount = useMemo(
-    () => Math.round((subtotal - discountAmount) * 100) / 100,
-    [subtotal, discountAmount],
+    () => Math.round((subtotal - calculatedDiscountAmount) * 100) / 100,
+    [subtotal, calculatedDiscountAmount],
   );
 
   const tax = useMemo(
@@ -202,9 +275,61 @@ export function PaymentContent() {
         };
 
         setOrder(normalized);
+
+        // Try to get payment by order ID (will exist if customer has requested bill)
+        try {
+          const paymentResponse = await getPaymentByOrderId(raw.id);
+          console.log("Raw payment response:", paymentResponse);
+          console.log("paymentResponse.data:", paymentResponse?.data);
+
+          // Handle both response formats: { success: true, data: { ... } } and { status: true, data: { ... } }
+          const isSuccess = (paymentResponse?.success ||
+            paymentResponse?.data?.status) as boolean;
+          const rawPayment =
+            paymentResponse?.data?.data || paymentResponse?.data;
+          const paymentData: PaymentStatusResponse = {
+            ...(rawPayment || {}),
+            discountRate:
+              rawPayment?.discountRate ?? rawPayment?.discountRate ?? 0,
+            discountAmount:
+              rawPayment?.discountAmount ?? rawPayment?.discountAmount ?? 0,
+          } as PaymentStatusResponse;
+
+          console.log("Extracted paymentData:", paymentData);
+          console.log("paymentData keys:", Object.keys(paymentData || {}));
+
+          if (isSuccess && paymentData?.status) {
+            console.log("Initial payment found:", {
+              status: paymentData.status,
+              discountRate: paymentData.discountRate,
+              discountAmount: paymentData.discountAmount,
+              fullPayment: paymentData,
+            });
+            setPaymentId(paymentData.id);
+            setPaymentStatus(paymentData.status);
+            setPaymentData(paymentData);
+
+            // If payment status is 'created', show waiting message
+            if (paymentData.status === "created") {
+              console.log("Payment is created, showing waiting screen");
+              setIsWaitingForBill(true);
+            } else if (paymentData.status === "accepted") {
+              console.log(
+                "Payment already accepted, discountRate:",
+                paymentData.discountRate,
+                "discountAmount:",
+                paymentData.discountAmount,
+              );
+              setDiscountRate(paymentData.discountRate || 0);
+              setIsWaitingForBill(false);
+            }
+          }
+        } catch (err) {
+          // Payment doesn't exist yet or error - this is normal, will be created on request bill
+          console.log("No payment found yet for order:", getErrorMessage(err));
+        }
       } catch (err: unknown) {
-        const message =
-          (err as { message?: string })?.message ?? "Failed to load order";
+        const message = getErrorMessage(err) || "Failed to load order";
         setError(message);
         setOrder(null);
       } finally {
@@ -215,25 +340,92 @@ export function PaymentContent() {
     fetchOrder();
   }, []);
 
+  // Poll for payment status when waiting for bill
+  useEffect(() => {
+    if (!paymentId || paymentStatus !== "created") {
+      return;
+    }
+
+    const pollPaymentStatus = async () => {
+      try {
+        const response = await getPaymentStatus(paymentId);
+        console.log("Raw poll response:", response);
+        console.log("response.data:", response?.data);
+
+        // Handle both response formats: { success: true, data: { ... } } and { status: true, data: { ... } }
+        const isSuccess = (response?.success ||
+          response?.data?.status) as boolean;
+        const rawPayment = response?.data?.data || response?.data;
+        const paymentData: PaymentStatusResponse = {
+          ...(rawPayment || {}),
+          discountRate:
+            rawPayment?.discountRate ?? rawPayment?.discountRate ?? 0,
+          discountAmount:
+            rawPayment?.discountAmount ?? rawPayment?.discountAmount ?? 0,
+        } as PaymentStatusResponse;
+
+        console.log("Extracted polling paymentData:", paymentData);
+        console.log("paymentData keys:", Object.keys(paymentData || {}));
+
+        if (isSuccess && paymentData?.status) {
+          console.log("Payment status updated:", {
+            status: paymentData.status,
+            discountRate: paymentData.discountRate,
+            discountAmount: paymentData.discountAmount,
+            fullPayment: paymentData,
+          });
+          setPaymentStatus(paymentData.status);
+          setPaymentData(paymentData);
+
+          // When status becomes 'accepted', it means waiter has set discount
+          if (paymentData.status === "accepted") {
+            console.log(
+              "Payment accepted! discountRate:",
+              paymentData.discountRate,
+              "discountAmount:",
+              paymentData.discountAmount,
+            );
+            setDiscountRate(paymentData.discountRate || 0);
+            setIsWaitingForBill(false);
+            // The payment form will now be displayed automatically
+            // because isWaitingForBill is false and showBillPreview is false
+          }
+        }
+      } catch (err) {
+        console.error("Error polling payment status:", getErrorMessage(err));
+      }
+    };
+
+    // Poll every 2 seconds
+    pollingIntervalRef.current = setInterval(pollPaymentStatus, 2000);
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [paymentId, paymentStatus]);
+
   // If returning from checkout with paid flag, show bill preview
   useEffect(() => {
     const paid = searchParams.get("paid");
     const method = searchParams.get("method");
-    const paymentId = searchParams.get("paymentId");
+    const paymentIdParam = searchParams.get("paymentId");
 
     // Stripe success: confirm payment server-side to mark success/completed
     if (
       paid === "1" &&
       method === "stripe" &&
-      paymentId &&
+      paymentIdParam &&
       !hasConfirmedPayment.current &&
       !isConfirmingPayment
     ) {
       hasConfirmedPayment.current = true;
       setIsConfirmingPayment(true);
-      confirmPayment(paymentId, "success")
-        .catch(() => {
+      confirmPayment(paymentIdParam, "success")
+        .catch((err) => {
           // If webhook already handled, ignore; otherwise surface a message
+          console.error("Confirm payment error:", getErrorMessage(err));
           setError((prev) => prev ?? "Unable to confirm Stripe payment");
         })
         .finally(() => {
@@ -250,22 +442,6 @@ export function PaymentContent() {
     }
   }, [searchParams, isConfirmingPayment]);
 
-  const handleBackNavigation = async () => {
-    if (showBillPreview) {
-      setShowBillPreview(false);
-      return;
-    }
-
-    // Cancel bill request when navigating back (revert payment_pending to preparing)
-    try {
-      await cancelBillRequest();
-    } catch (err) {
-      console.error("Failed to cancel bill request:", err);
-    }
-
-    router.push("/order-info");
-  };
-
   // Persist order snapshot for post-payment bill preview
   useEffect(() => {
     if (!order) return;
@@ -275,21 +451,12 @@ export function PaymentContent() {
         tableNumber,
         tipMode,
         customTipInput,
-        discountType,
-        discountValue,
       };
       localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(payload));
     } catch (e) {
       console.error("Failed to persist order snapshot", e);
     }
-  }, [
-    order,
-    tableNumber,
-    tipMode,
-    customTipInput,
-    discountType,
-    discountValue,
-  ]);
+  }, [order, tableNumber, tipMode, customTipInput]);
 
   // Restore snapshot when returning from payment and backend has no active order
   useEffect(() => {
@@ -302,8 +469,6 @@ export function PaymentContent() {
           tableNumber?: string;
           tipMode?: typeof tipMode;
           customTipInput?: string;
-          discountType?: typeof discountType;
-          discountValue?: string;
         };
         if (parsed.order) {
           setOrder(parsed.order);
@@ -311,9 +476,6 @@ export function PaymentContent() {
           if (parsed.tipMode) setTipMode(parsed.tipMode);
           if (parsed.customTipInput !== undefined)
             setCustomTipInput(parsed.customTipInput);
-          if (parsed.discountType) setDiscountType(parsed.discountType);
-          if (parsed.discountValue !== undefined)
-            setDiscountValue(parsed.discountValue);
         }
       }
     } catch (e) {
@@ -331,7 +493,7 @@ export function PaymentContent() {
         "cash",
         undefined,
         tipAmount,
-        discountAmount,
+        calculatedDiscountAmount,
       );
 
       if (response?.success && response.data?.status) {
@@ -342,8 +504,7 @@ export function PaymentContent() {
         setError(response.data?.message || "Unable to record payment");
       }
     } catch (err: unknown) {
-      const message =
-        (err as { message?: string })?.message ?? "Error recording payment";
+      const message = getErrorMessage(err) || "Error recording payment";
       setError(message);
     } finally {
       setIsPayingCash(false);
@@ -362,7 +523,7 @@ export function PaymentContent() {
         selectedMethod,
         successReturnUrl,
         tipAmount,
-        discountAmount,
+        calculatedDiscountAmount,
       );
       if (response?.success && response.data?.status) {
         const payload =
@@ -383,8 +544,7 @@ export function PaymentContent() {
         setError(response.data?.message || "Unable to start online payment");
       }
     } catch (err: unknown) {
-      const message =
-        (err as { message?: string })?.message ?? "Error starting payment";
+      const message = getErrorMessage(err) || "Error starting payment";
       setError(message);
     } finally {
       setIsPayingOnline(false);
@@ -394,10 +554,6 @@ export function PaymentContent() {
   const handleCloseBillPreview = () => {
     setShowBillPreview(false);
     router.push("/order-info");
-  };
-
-  const handlePrintBill = () => {
-    window.print();
   };
 
   const handleDownloadPDF = async () => {
@@ -500,7 +656,7 @@ export function PaymentContent() {
         document.body.removeChild(tempDiv);
       }
     } catch (err) {
-      console.error("PDF download failed:", err);
+      console.error("PDF download failed:", getErrorMessage(err));
       setError("Failed to generate PDF");
     }
   };
@@ -516,7 +672,7 @@ export function PaymentContent() {
   if (isLoading) {
     return (
       <MobileLayout>
-        <MobileHeader title="Your Bill" tableNumber={tableNumber} showBack />
+        <MobileHeader title="Your Bill" tableNumber={tableNumber} />
         <div style={{ padding: "20px", textAlign: "center", color: "#667085" }}>
           Loading...
         </div>
@@ -527,9 +683,91 @@ export function PaymentContent() {
   if (!showBillPreview && (error || !order)) {
     return (
       <MobileLayout>
-        <MobileHeader title="Your Bill" tableNumber={tableNumber} showBack />
+        <MobileHeader title="Your Bill" tableNumber={tableNumber} />
         <div style={{ padding: "20px", textAlign: "center", color: "#c62828" }}>
           {error || "Order not found"}
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  // Show waiting message when bill is being prepared
+  if (isWaitingForBill) {
+    return (
+      <MobileLayout showBottomNav={false}>
+        <MobileHeader title="Your Bill" tableNumber={tableNumber} />
+        <div style={{ padding: "40px 20px", textAlign: "center" }}>
+          <style>{`
+            @keyframes pulse {
+              0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+              }
+              50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+              }
+            }
+            @keyframes rotate {
+              from {
+                transform: rotate(0deg);
+              }
+              to {
+                transform: rotate(360deg);
+              }
+            }
+            @keyframes fadeInOut {
+              0%, 100% {
+                opacity: 0.5;
+              }
+              50% {
+                opacity: 1;
+              }
+            }
+            .waiting-icon {
+              animation: pulse 2s ease-in-out infinite;
+            }
+            .waiting-emoji {
+              display: inline-block;
+              animation: rotate 3s linear infinite;
+            }
+            .waiting-text {
+              animation: fadeInOut 2s ease-in-out infinite;
+            }
+          `}</style>
+          <div
+            className="waiting-icon"
+            style={{
+              width: "80px",
+              height: "80px",
+              background: "#e9f3ff",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 24px",
+              fontSize: "40px",
+            }}
+          >
+            <span className="waiting-emoji">⏳</span>
+          </div>
+          <div
+            style={{
+              fontSize: "18px",
+              fontWeight: 700,
+              color: "#1f3b57",
+              marginBottom: "12px",
+            }}
+          >
+            Preparing Your Bill
+          </div>
+          <div
+            className="waiting-text"
+            style={{ color: "#667085", fontSize: "14px", lineHeight: "1.5" }}
+          >
+            The system has sent a bill request to the staff member, please wait
+            a moment.
+          </div>
         </div>
       </MobileLayout>
     );
@@ -740,7 +978,7 @@ export function PaymentContent() {
                 <span style={{ color: "#667085" }}>Subtotal</span>
                 <span style={{ fontWeight: 600 }}>{formatPrice(subtotal)}</span>
               </div>
-              {discountAmount > 0 && (
+              {calculatedDiscountAmount > 0 && (
                 <div
                   style={{
                     display: "flex",
@@ -750,14 +988,13 @@ export function PaymentContent() {
                   }}
                 >
                   <span>
-                    Discount (
-                    {discountType === "percentage"
-                      ? `${discountValue}%`
-                      : "Fixed"}
-                    )
+                    Discount
+                    {displayDiscountRate > 0
+                      ? ` (${displayDiscountRate}%)`
+                      : ""}
                   </span>
                   <span style={{ fontWeight: 600 }}>
-                    -{formatPrice(discountAmount)}
+                    -{formatPrice(calculatedDiscountAmount)}
                   </span>
                 </div>
               )}
@@ -853,22 +1090,6 @@ export function PaymentContent() {
         >
           <div style={{ display: "flex", gap: "12px" }}>
             <button
-              onClick={handlePrintBill}
-              style={{
-                flex: 1,
-                padding: "14px 20px",
-                background: "white",
-                color: "#1f7af2",
-                border: "2px solid #1f7af2",
-                borderRadius: "12px",
-                fontWeight: 800,
-                fontSize: "16px",
-                cursor: "pointer",
-              }}
-            >
-              🖨️ Print Bill
-            </button>
-            <button
               onClick={handleDownloadPDF}
               style={{
                 flex: 1,
@@ -908,12 +1129,7 @@ export function PaymentContent() {
 
   return (
     <MobileLayout showBottomNav={false}>
-      <MobileHeader
-        title="Your Bill"
-        tableNumber={tableNumber}
-        showBack
-        onBack={handleBackNavigation}
-      />
+      <MobileHeader title="Your Bill" tableNumber={tableNumber} />
 
       <div
         style={{
@@ -1043,7 +1259,7 @@ export function PaymentContent() {
             <span style={{ color: "#667085" }}>Subtotal</span>
             <span style={{ fontWeight: 600 }}>{formatPrice(subtotal)}</span>
           </div>
-          {discountAmount > 0 && (
+          {calculatedDiscountAmount > 0 && (
             <div
               style={{
                 display: "flex",
@@ -1052,12 +1268,9 @@ export function PaymentContent() {
                 color: "#10b981",
               }}
             >
-              <span>
-                Discount (
-                {discountType === "percentage" ? `${discountValue}%` : "Fixed"})
-              </span>
+              <span>Discount ({displayDiscountRate}%)</span>
               <span style={{ fontWeight: 600 }}>
-                -{formatPrice(discountAmount)}
+                -{formatPrice(calculatedDiscountAmount)}
               </span>
             </div>
           )}
@@ -1257,112 +1470,6 @@ export function PaymentContent() {
               {formatPrice(tipAmount)}
             </span>
           </div>
-        </div>
-
-        {/* Discount Section */}
-        <div style={{ marginTop: "24px" }}>
-          <div
-            style={{
-              fontSize: "16px",
-              fontWeight: 800,
-              color: "#1f3b57",
-              marginBottom: "12px",
-            }}
-          >
-            Apply Discount
-          </div>
-          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-            <button
-              onClick={() => {
-                setDiscountType("none");
-                setDiscountValue("");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px",
-                background: discountType === "none" ? "#e74c3c" : "white",
-                color: discountType === "none" ? "white" : "#667085",
-                border: `2px solid ${discountType === "none" ? "#e74c3c" : "#e5e7eb"}`,
-                borderRadius: "10px",
-                fontWeight: 700,
-                fontSize: "14px",
-                cursor: "pointer",
-              }}
-            >
-              None
-            </button>
-            <button
-              onClick={() => {
-                setDiscountType("percentage");
-                setDiscountValue("");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px",
-                background: discountType === "percentage" ? "#e74c3c" : "white",
-                color: discountType === "percentage" ? "white" : "#667085",
-                border: `2px solid ${discountType === "percentage" ? "#e74c3c" : "#e5e7eb"}`,
-                borderRadius: "10px",
-                fontWeight: 700,
-                fontSize: "14px",
-                cursor: "pointer",
-              }}
-            >
-              % Off
-            </button>
-            <button
-              onClick={() => {
-                setDiscountType("fixed");
-                setDiscountValue("");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px",
-                background: discountType === "fixed" ? "#e74c3c" : "white",
-                color: discountType === "fixed" ? "white" : "#667085",
-                border: `2px solid ${discountType === "fixed" ? "#e74c3c" : "#e5e7eb"}`,
-                borderRadius: "10px",
-                fontWeight: 700,
-                fontSize: "14px",
-                cursor: "pointer",
-              }}
-            >
-              $ Off
-            </button>
-          </div>
-
-          {discountType !== "none" && (
-            <input
-              type="number"
-              placeholder={
-                discountType === "percentage"
-                  ? "Enter discount %"
-                  : "Enter discount amount"
-              }
-              value={discountValue}
-              onChange={(e) => setDiscountValue(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "12px",
-                border: "1px solid #e5e7eb",
-                borderRadius: "10px",
-                fontSize: "14px",
-              }}
-            />
-          )}
-
-          {discountAmount > 0 && (
-            <div
-              style={{
-                marginTop: "12px",
-                fontSize: "14px",
-                color: "#10b981",
-                fontWeight: 700,
-              }}
-            >
-              💰 Discount: -{formatPrice(discountAmount)}
-            </div>
-          )}
         </div>
 
         {/* Error Display */}

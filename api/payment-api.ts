@@ -26,6 +26,22 @@ export type InitiatePaymentResponse = {
   sandbox?: boolean;
 };
 
+export type PaymentStatusResponse = {
+  id: string;
+  status: string;
+  discountRate: number;
+  discountAmount: number;
+  orderId?: string;
+  amount?: number;
+  paymentMethod?: string | null;
+  stripeSessionId?: string | null;
+  checkoutUrl?: string | null;
+  metadata?: any;
+  currency?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export async function initiatePayment(
   method: "cash" | "stripe",
   returnUrl?: string,
@@ -52,4 +68,24 @@ export async function confirmPayment(
     },
   );
   return response.data as ApiResponse;
+}
+
+/**
+ * Get payment status by payment ID
+ */
+export async function getPaymentStatus(
+  paymentId: string,
+): Promise<ApiResponse<PaymentStatusResponse>> {
+  const response = await apiRequest.get(`/payments/guest/${paymentId}`);
+  return response.data as ApiResponse<PaymentStatusResponse>;
+}
+
+/**
+ * Get payment by order ID
+ */
+export async function getPaymentByOrderId(
+  orderId: string,
+): Promise<ApiResponse<PaymentStatusResponse>> {
+  const response = await apiRequest.get(`/payments/guest/order/${orderId}`);
+  return response.data as ApiResponse<PaymentStatusResponse>;
 }

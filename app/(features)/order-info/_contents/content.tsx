@@ -19,6 +19,32 @@ import {
   onOrderItemUpdated,
 } from "@/libs/socket";
 
+// Helper function to extract error message from various error types
+const getErrorMessage = (err: unknown): string => {
+  if (!err) return "An unknown error occurred";
+
+  if (typeof err === "object" && err !== null) {
+    const error = err as Record<string, unknown>;
+
+    if (typeof error.message === "string") {
+      return error.message;
+    }
+
+    if (
+      error.data &&
+      typeof error.data === "object" &&
+      "message" in error.data &&
+      typeof (error.data as Record<string, unknown>).message === "string"
+    ) {
+      return (error.data as Record<string, unknown>).message as string;
+    }
+  }
+
+  if (typeof err === "string") return err;
+
+  return "An unexpected error occurred";
+};
+
 interface OrderItem {
   id: string;
   menuItemId: string;
@@ -579,8 +605,7 @@ export function OrderInfoContent() {
         }
       } catch (err: unknown) {
         const message =
-          (err as { message?: string })?.message ??
-          "Error loading order information";
+          getErrorMessage(err) || "Error loading order information";
         setError(message);
       } finally {
         setIsLoading(false);
@@ -596,20 +621,21 @@ export function OrderInfoContent() {
     try {
       setIsSubmitting(true);
       setInfo(null);
+      setError(null);
       const response = await requestBill();
       if (response?.success && response.data?.status) {
         // Update order status
         if (order) {
           setOrder({ ...order, status: "payment_pending" });
         }
-        // Navigate to payment page
+        // Auto-navigate to payment page where customer will see the waiting screen
+        // and automatic updates when waiter accepts the payment
         router.push("/payment");
       } else {
         setError(response.data?.message || "Unable to request bill");
       }
     } catch (err: unknown) {
-      const message =
-        (err as { message?: string })?.message ?? "Error requesting bill";
+      const message = getErrorMessage(err) || "Error requesting bill";
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -628,8 +654,7 @@ export function OrderInfoContent() {
         setError(response.data?.message || "Unable to call waiter");
       }
     } catch (err: unknown) {
-      const message =
-        (err as { message?: string })?.message ?? "Error calling waiter";
+      const message = getErrorMessage(err) || "Error calling waiter";
       setError(message);
     } finally {
       setIsCallingWaiter(false);
