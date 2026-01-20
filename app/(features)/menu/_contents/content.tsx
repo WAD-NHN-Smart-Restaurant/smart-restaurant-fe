@@ -15,6 +15,7 @@ import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
 import { formatPrice } from "@/utils/format";
 import Cookies from "js-cookie";
+import { PopularityIndicator } from "../_components/popularity-indicator";
 import Image from "next/image";
 
 interface MenuFilters {
@@ -192,7 +193,8 @@ export function GuestMenuPreviewContent() {
 
   // Get all categories (unfiltered)
   const allCategories = useMemo(() => {
-    return categoriesData || [];
+    if (!categoriesData) return [];
+    return Array.isArray(categoriesData) ? categoriesData : [];
   }, [categoriesData]);
 
   // Get menu items from backend - already filtered and sorted
@@ -376,9 +378,22 @@ export function GuestMenuPreviewContent() {
                     <div className="menu-item-info">
                       <div>
                         <div className="menu-item-name">{item.name}</div>
-                        {/* Rating */}
-                        <div className="menu-item-rating">
+                        {/* Rating & Popularity */}
+                        <div
+                          className="menu-item-rating"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
                           ☆☆☆☆☆ (0 reviews)
+                          {item.popularity && item.popularity > 0 && (
+                            <PopularityIndicator
+                              popularity={item.popularity}
+                              variant="inline"
+                            />
+                          )}
                         </div>
                         {/* Status Badge */}
                         <span

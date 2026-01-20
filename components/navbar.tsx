@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/utils/utils";
 import { LogOut, Menu, ForkKnife } from "lucide-react";
-import { AUTH_PATHS, PROTECTED_PATHS, PUBLIC_PATHS } from "@/data/path";
+import { AUTH_PATHS, PUBLIC_PATHS } from "@/data/path";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -36,10 +36,7 @@ export function Navbar() {
   ];
 
   const protectedNavItems: NavItem[] = [
-    {
-      title: "Tables",
-      href: PROTECTED_PATHS.TABLES.INDEX,
-    },
+    // Add more protected nav items as needed
   ];
 
   const allNavItems = isAuthenticated
@@ -47,7 +44,7 @@ export function Navbar() {
     : publicNavItems;
 
   return (
-    <nav className="sticky top-0 z-100 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center justify-between px-4 md:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">

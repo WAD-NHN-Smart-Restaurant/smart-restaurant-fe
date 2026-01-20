@@ -10,7 +10,6 @@
   padding: 20px 0;
 }
 
-/* Mobile Container */
 .mobile-container {
   width: 100%;
   margin: 0 auto;
@@ -428,20 +427,17 @@
 
 /* Add to Cart Bar */
 .add-to-cart-bar {
-  position: fixed;
-  bottom: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 480px;
-  width: 100%;
+  position: sticky;
+  bottom: 80px; /* đứng trên BottomNav */
   background: white;
+
   padding: 15px 20px;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 15px;
-  z-index: 90;
+  flex-direction: column;
+  gap: 10px;
+
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  z-index: 10;
 }
 
 .add-to-cart-btn {
