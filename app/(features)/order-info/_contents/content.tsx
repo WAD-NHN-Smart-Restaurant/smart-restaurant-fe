@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { getCurrentOrder, requestBill, callWaiter } from "@/api/order-api";
 import { Button } from "@/components/ui/button";
+// import { Alert, AlertDescription } from "@/components/ui/alert";
+// import { AlertTriangle } from "lucide-react";
 import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
 import { BottomNav } from "@/components/bottom-nav";
@@ -16,23 +18,67 @@ import {
   onOrderStatusUpdated,
   onOrderItemUpdated,
 } from "@/libs/socket";
-import {
-  useActiveOrderQuery,
-  useRequestBillMutation,
-  useCallWaiterMutation,
-} from "@/hooks/use-order-query";
-import type { Order, OrderItem } from "@/types/order-type";
+
+interface OrderItem {
+  id: string;
+  menuItemId: string;
+  menuItemName?: string;
+  quantity: number;
+  unitPrice: number;
+  specialRequest?: string;
+  status: string;
+  options?: Array<{
+    id: string;
+    optionName?: string;
+    priceAtTime: number;
+  }>;
+}
+
+interface Order {
+  id: string;
+  tableId: string;
+  status: string;
+  guestName?: string;
+  notes?: string;
+  totalAmount: number;
+  createdAt: string;
+  orderItems: OrderItem[];
+}
 
 // Compute order totals locally to avoid stale/missing totals from backend
-const computeOrderTotals = (items?: OrderItem[]) => {
-  if (!items) return 0;
+const computeOrderTotals = (items: OrderItem[]) => {
   return items.reduce((sum, item) => {
-    const optionsTotal = (item.orderItemOptions || []).reduce(
+    const optionsTotal = (item.options || []).reduce(
       (optSum, opt) => optSum + opt.priceAtTime,
       0,
     );
     return sum + item.quantity * (item.unitPrice + optionsTotal);
   }, 0);
+};
+
+// Raw response shape from backend for orders
+type RawOrder = {
+  id: string;
+  table_id: string;
+  status: string;
+  guest_name?: string | null;
+  notes?: string | null;
+  total_amount?: number | null;
+  created_at: string;
+  order_items?: Array<{
+    id: string;
+    menu_item_id: string;
+    menu_item_name?: string | null;
+    quantity: number;
+    unit_price: number;
+    special_request?: string | null;
+    status: string;
+    order_item_options?: Array<{
+      id: string;
+      option_name?: string | null;
+      price_at_time: number;
+    }>;
+  }>;
 };
 
 const ORDER_STATUS_BADGE: Record<
@@ -67,7 +113,7 @@ const ITEM_STATUS_BADGE: Record<
   { label: string; bg: string; color: string }
 > = {
   pending: { label: "Queued", bg: "#e8f4fd", color: "#2980b9" },
-  accepted: { label: "Received", bg: "#e8fffd", color: "#2987b9" },
+  accepted: { label: "Queued", bg: "#e8f4fd", color: "#2980b9" },
   preparing: { label: "Cooking", bg: "#fff4e6", color: "#e67e22" },
   ready: { label: "Ready", bg: "#d5f4e6", color: "#27ae60" },
   served: { label: "Served", bg: "#d5f4e6", color: "#27ae60" },
@@ -99,18 +145,17 @@ const getOrderStepIndex = (status: string) =>
 
 export function OrderInfoContent() {
   const router = useRouter();
-  const queryClient = useQueryClient();
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCallingWaiter, setIsCallingWaiter] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | undefined>(undefined);
   const [isHoveringRequestBill, setIsHoveringRequestBill] = useState(false);
   const [isHoveringCallWaiter, setIsHoveringCallWaiter] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { isAuthenticated, user } = useAuth();
   const isCustomer = Boolean(isAuthenticated && user);
-
-  // Use React Query hooks
-  const { data: order, isLoading } = useActiveOrderQuery();
-  const requestBillMutation = useRequestBillMutation();
-  const callWaiterMutation = useCallWaiterMutation();
 
   // Load table number from localStorage
   useEffect(() => {
@@ -122,20 +167,14 @@ export function OrderInfoContent() {
 
   // Derived totals for rendering
   const itemsCount = useMemo(() => {
-    if (!order?.orderItems) return 0;
+    if (!order) return 0;
     return order.orderItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [order]);
 
   const sessionTotal = useMemo(() => {
     if (!order) return 0;
     // Recompute to stay accurate with live item updates
-    return order.totalAmount ?? computeOrderTotals(order.orderItems);
-  }, [order]);
-
-  // Check if all items are ready or served (for bill request)
-  const canRequestBill = useMemo(() => {
-    if (!order?.orderItems || order.orderItems.length === 0) return false;
-    return order.orderItems.every((item) => item.status === "served");
+    return order.totalAmount || computeOrderTotals(order.orderItems);
   }, [order]);
 
   const renderOrderCard = (
@@ -144,52 +183,12 @@ export function OrderInfoContent() {
     totalCount: number,
     variant: "current" | "past" = "current",
   ) => {
-    // Calculate step index based on order items status (excluding rejected items)
-    const nonRejectedItems =
-      data.orderItems?.filter((item) => item.status !== "rejected") || [];
-    let stepIndex = 0;
-    let itemsStatus = "pending";
-
-    if (nonRejectedItems.length > 0) {
-      const allAccepted = nonRejectedItems.every((item) =>
-        ["accepted", "preparing", "ready", "served"].includes(item.status),
-      );
-      const allReady = nonRejectedItems.every((item) =>
-        ["ready", "served"].includes(item.status),
-      );
-      const allServed = nonRejectedItems.every(
-        (item) => item.status === "served",
-      );
-
-      if (allServed) {
-        stepIndex = 3; // All steps completed
-        itemsStatus = "served";
-      } else if (allReady) {
-        stepIndex = 2; // Ready is active
-        itemsStatus = "ready";
-      } else if (allAccepted) {
-        stepIndex = 1; // Preparing is active
-        itemsStatus = "preparing";
-      }
-      // else stepIndex = 0 (Received is active), itemsStatus = 'pending'
-    }
-
-    // Determine pill based on order status or items status
-    let displayStatus = itemsStatus;
-    if (
-      ["payment_pending", "completed", "cancelled", "rejected"].includes(
-        data.status,
-      )
-    ) {
-      displayStatus = data.status;
-    }
-
-    const pill = ORDER_STATUS_BADGE[displayStatus] ?? {
-      label: displayStatus,
+    const pill = ORDER_STATUS_BADGE[data.status] ?? {
+      label: data.status,
       bg: "#f5f7fb",
       color: "#5c6b7a",
     };
-
+    const stepIndex = getOrderStepIndex(data.status);
     const steps = ["Received", "Preparing", "Ready"];
     // const stepColors = ["#23a05d", "#e74c3c", "#23a05d"];
     const orderTotal =
@@ -337,100 +336,85 @@ export function OrderInfoContent() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {(data.orderItems || []).map((item) => {
+          {data.orderItems.map((item) => {
             const badge = getItemBadge(item.status);
             return (
               <div
                 key={item.id}
-                className="px-3 border-b border-[#eef1f5] py-2"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 0",
+                  borderBottom: "1px solid #eef1f5",
+                }}
               >
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
+                    fontWeight: 800,
+                    color: "#d64034",
+                    minWidth: 32,
+                    textAlign: "right",
                   }}
                 >
+                  {item.quantity}x
+                </div>
+                <div style={{ flex: 1 }}>
                   <div
                     style={{
-                      fontWeight: 800,
-                      color: "#d64034",
-                      minWidth: 32,
-                      textAlign: "right",
+                      fontWeight: 700,
+                      color: "#1f3b57",
+                      marginBottom: 4,
+                      fontSize: 15,
                     }}
                   >
-                    {item.quantity}x
+                    {item.menuItemName || "Item"}
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ color: "#7f8c9d", fontSize: 12 }}>
+                    {formatPrice(item.unitPrice)}
+                  </div>
+                  {item.options && item.options.length > 0 && (
                     <div
-                      style={{
-                        fontWeight: 700,
-                        color: "#1f3b57",
-                        marginBottom: 4,
-                        fontSize: 15,
-                      }}
+                      style={{ marginTop: 6, fontSize: 12, color: "#6c7a89" }}
                     >
-                      {item.menuItemName || "Item"}
-                    </div>
-                    <div style={{ color: "#7f8c9d", fontSize: 12 }}>
-                      {formatPrice(item.unitPrice)}
-                    </div>
-                    {item.orderItemOptions &&
-                      item.orderItemOptions.length > 0 && (
-                        <div
-                          style={{
-                            marginTop: 6,
-                            fontSize: 12,
-                            color: "#6c7a89",
-                          }}
-                        >
-                          {item.orderItemOptions.map((opt) => (
-                            <div key={opt.id}>
-                              + {opt.optionName} ({formatPrice(opt.priceAtTime)}
-                              )
-                            </div>
-                          ))}
+                      {item.options.map((opt) => (
+                        <div key={opt.id}>
+                          + {opt.optionName} ({formatPrice(opt.priceAtTime)})
                         </div>
-                      )}
-                    {item.specialRequest && (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          fontSize: 12,
-                          color: "#c0392b",
-                          fontStyle: "italic",
-                        }}
-                      >
-                        Note: {item.specialRequest}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1">
+                      ))}
+                    </div>
+                  )}
+                  {item.specialRequest && (
                     <div
                       style={{
-                        padding: "6px 12px",
-                        borderRadius: "14px",
-                        background: badge.bg,
-                        color: badge.color,
-                        fontWeight: 700,
+                        marginTop: 6,
                         fontSize: 12,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        minWidth: 92,
-                        justifyContent: "center",
+                        color: "#c0392b",
+                        fontStyle: "italic",
                       }}
                     >
-                      <span>{badge.icon}</span>
-                      <span>{badge.label}</span>
+                      Note: {item.specialRequest}
                     </div>
-                  </div>
+                  )}
                 </div>
-                {item.status === "rejected" && item.notes && (
-                  <div className=" text-red-500 px-10 mt-1 italic text-sm">
-                    Reject reason: {item.notes}
-                  </div>
-                )}
+                <div
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "14px",
+                    background: badge.bg,
+                    color: badge.color,
+                    fontWeight: 700,
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    minWidth: 92,
+                    justifyContent: "center",
+                  }}
+                >
+                  <span>{badge.icon}</span>
+                  <span>{badge.label}</span>
+                </div>
               </div>
             );
           })}
@@ -450,7 +434,7 @@ export function OrderInfoContent() {
               gap: 8,
             }}
           >
-            🎉 Your order is ready!.
+            🎉 Your order is ready! Please pick up at the counter.
           </div>
         )}
 
@@ -481,12 +465,12 @@ export function OrderInfoContent() {
     );
   };
 
-  const currentOrders: Order[] = order ? [order] : [];
+  const currentOrders = order ? [order] : [];
   const pastOrders: Order[] = [];
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const storedTableId = localStorage.getItem("guest_table_id");
+    const storedTableId = localStorage.getItem("tableId");
     if (storedTableId) {
       // Connect to Socket.io
       const socket = connectSocket();
@@ -503,14 +487,27 @@ export function OrderInfoContent() {
       // Listen for real-time updates
       const unsubscribeOrderStatus = onOrderStatusUpdated((data) => {
         console.log("Order status updated:", data);
-        // Invalidate and refetch the active order query
-        queryClient.invalidateQueries({ queryKey: ["orders", "active"] });
+        setOrder((prev) => {
+          if (prev && prev.id === data.order_id) {
+            return { ...prev, status: data.status };
+          }
+          return prev;
+        });
       });
 
       const unsubscribeOrderItem = onOrderItemUpdated((data) => {
         console.log("Order item updated:", data);
-        // Invalidate and refetch the active order query
-        queryClient.invalidateQueries({ queryKey: ["orders", "active"] });
+        setOrder((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            orderItems: prev.orderItems.map((item) =>
+              item.id === data.order_item_id
+                ? { ...item, status: data.status }
+                : item,
+            ),
+          };
+        });
 
         // Show notification for rejected items
         if (data.status === "rejected" && data.rejected_reason) {
@@ -525,14 +522,118 @@ export function OrderInfoContent() {
         disconnectSocket();
       };
     }
-  }, [queryClient]);
+  }, []);
 
-  const handleRequestBill = () => {
-    requestBillMutation.mutate();
+  useEffect(() => {
+    const fetchOrder = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await getCurrentOrder();
+        // Response has structure: {success, data: {status, data: RawOrder}}
+        if (response?.success && response.data?.status) {
+          const raw = response.data.data as any; // Backend may return camelCase or snake_case
+
+          // Handle both camelCase (new) and snake_case (old) responses
+          const orderItems = raw.orderItems || raw.order_items || [];
+
+          const mappedItems = orderItems.map((it: any) => ({
+            id: it.id,
+            menuItemId: it.menuItemId || it.menu_item_id,
+            menuItemName: it.menuItemName || it.menu_item_name || undefined,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice || it.unit_price,
+            specialRequest:
+              it.notes || it.specialRequest || it.special_request || undefined,
+            status: it.status,
+            options: (it.orderItemOptions || it.order_item_options || []).map(
+              (op: any) => ({
+                id: op.id,
+                optionName: op.optionName || op.option_name || undefined,
+                priceAtTime: op.priceAtTime || op.price_at_time,
+              }),
+            ),
+          }));
+
+          const mapped: Order = {
+            id: raw.id,
+            tableId: raw.tableId || raw.table_id,
+            status: raw.status,
+            guestName: raw.guestName || raw.guest_name || undefined,
+            notes:
+              raw.notes ||
+              raw.specialRequest ||
+              raw.special_request ||
+              undefined,
+            createdAt: raw.createdAt || raw.created_at,
+            orderItems: mappedItems,
+            // Prefer backend total_amount/totalAmount when provided, otherwise compute locally
+            totalAmount:
+              raw.totalAmount ??
+              raw.total_amount ??
+              computeOrderTotals(mappedItems),
+          };
+          setOrder(mapped);
+        } else {
+          setError("Unable to load order information");
+        }
+      } catch (err: unknown) {
+        const message =
+          (err as { message?: string })?.message ??
+          "Error loading order information";
+        setError(message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrder();
+    // Socket updates handle live changes; no polling to avoid UI flicker
+    return () => undefined;
+  }, []);
+
+  const handleRequestBill = async () => {
+    try {
+      setIsSubmitting(true);
+      setInfo(null);
+      const response = await requestBill();
+      if (response?.success && response.data?.status) {
+        // Update order status
+        if (order) {
+          setOrder({ ...order, status: "payment_pending" });
+        }
+        // Navigate to payment page
+        router.push("/payment");
+      } else {
+        setError(response.data?.message || "Unable to request bill");
+      }
+    } catch (err: unknown) {
+      const message =
+        (err as { message?: string })?.message ?? "Error requesting bill";
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleCallWaiter = () => {
-    callWaiterMutation.mutate();
+  const handleCallWaiter = async () => {
+    try {
+      setIsCallingWaiter(true);
+      setError(null);
+      setInfo(null);
+      const response = await callWaiter();
+      if (response?.success && response.data?.status) {
+        setInfo("Waiter notified. Please stay seated.");
+      } else {
+        setError(response.data?.message || "Unable to call waiter");
+      }
+    } catch (err: unknown) {
+      const message =
+        (err as { message?: string })?.message ?? "Error calling waiter";
+      setError(message);
+    } finally {
+      setIsCallingWaiter(false);
+    }
   };
 
   if (isLoading) {
@@ -576,37 +677,6 @@ export function OrderInfoContent() {
               }}
             >
               No orders yet
-            </p>
-            <Button onClick={() => router.push("/menu")}>Back to Menu</Button>
-          </div>
-        </div>
-        <BottomNav />
-      </MobileLayout>
-    );
-  }
-
-  if (!order) {
-    return (
-      <MobileLayout>
-        <MobileHeader title="Your Orders" tableNumber={tableNumber} />
-        <div
-          style={{
-            paddingBottom: "80px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "60vh",
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <p
-              style={{
-                fontSize: "18px",
-                color: "#7f8c8d",
-                marginBottom: "16px",
-              }}
-            >
-              No orders available
             </p>
             <Button onClick={() => router.push("/menu")}>Back to Menu</Button>
           </div>
@@ -683,10 +753,9 @@ export function OrderInfoContent() {
               <button
                 onClick={handleRequestBill}
                 disabled={
-                  requestBillMutation.isPending ||
+                  isSubmitting ||
                   order?.status === "payment_pending" ||
-                  order?.status === "completed" ||
-                  !canRequestBill
+                  order?.status === "completed"
                 }
                 onMouseEnter={() => setIsHoveringRequestBill(true)}
                 onMouseLeave={() => setIsHoveringRequestBill(false)}
@@ -694,36 +763,32 @@ export function OrderInfoContent() {
                   padding: "8px 16px",
                   background:
                     order?.status === "payment_pending" ||
-                    order?.status === "completed" ||
-                    !canRequestBill
+                    order?.status === "completed"
                       ? "#cccccc"
-                      : isHoveringRequestBill && !requestBillMutation.isPending
+                      : isHoveringRequestBill && !isSubmitting
                         ? "#f5f5f5"
                         : "white",
                   color:
                     order?.status === "payment_pending" ||
-                    order?.status === "completed" ||
-                    !canRequestBill
+                    order?.status === "completed"
                       ? "#666666"
                       : "#e74c3c",
                   border: "none",
                   borderRadius: "20px",
                   fontWeight: "700",
                   cursor:
-                    requestBillMutation.isPending ||
+                    isSubmitting ||
                     order?.status === "payment_pending" ||
-                    order?.status === "completed" ||
-                    !canRequestBill
+                    order?.status === "completed"
                       ? "not-allowed"
                       : "pointer",
-                  opacity: requestBillMutation.isPending ? 0.6 : 1,
+                  opacity: isSubmitting ? 0.6 : 1,
                   fontSize: "14px",
                   whiteSpace: "nowrap",
                   transition: "all 0.2s ease",
                   transform:
                     isHoveringRequestBill &&
-                    !requestBillMutation.isPending &&
-                    canRequestBill &&
+                    !isSubmitting &&
                     !(
                       order?.status === "payment_pending" ||
                       order?.status === "completed"
@@ -732,8 +797,7 @@ export function OrderInfoContent() {
                       : "scale(1)",
                   boxShadow:
                     isHoveringRequestBill &&
-                    !requestBillMutation.isPending &&
-                    canRequestBill &&
+                    !isSubmitting &&
                     !(
                       order?.status === "payment_pending" ||
                       order?.status === "completed"
@@ -746,49 +810,61 @@ export function OrderInfoContent() {
                   ? "Bill Requested"
                   : order?.status === "completed"
                     ? "Paid"
-                    : !canRequestBill
-                      ? "Items Not Ready"
-                      : "Request Bill"}
+                    : "Request Bill"}
               </button>
               <button
                 onClick={handleCallWaiter}
-                disabled={callWaiterMutation.isPending}
+                disabled={isCallingWaiter}
                 onMouseEnter={() => setIsHoveringCallWaiter(true)}
                 onMouseLeave={() => setIsHoveringCallWaiter(false)}
                 style={{
                   padding: "8px 16px",
                   background:
-                    isHoveringCallWaiter && !callWaiterMutation.isPending
+                    isHoveringCallWaiter && !isCallingWaiter
                       ? "rgba(255, 255, 255, 0.35)"
                       : "rgba(255, 255, 255, 0.2)",
                   color: "white",
-                  border: `1px solid ${isHoveringCallWaiter && !callWaiterMutation.isPending ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.4)"}`,
+                  border: `1px solid ${isHoveringCallWaiter && !isCallingWaiter ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.4)"}`,
                   borderRadius: "20px",
                   fontWeight: "600",
-                  cursor: callWaiterMutation.isPending
-                    ? "not-allowed"
-                    : "pointer",
-                  opacity: callWaiterMutation.isPending ? 0.6 : 1,
+                  cursor: isCallingWaiter ? "not-allowed" : "pointer",
+                  opacity: isCallingWaiter ? 0.6 : 1,
                   fontSize: "14px",
                   whiteSpace: "nowrap",
                   transition: "all 0.2s ease",
                   transform:
-                    isHoveringCallWaiter && !callWaiterMutation.isPending
+                    isHoveringCallWaiter && !isCallingWaiter
                       ? "scale(1.05)"
                       : "scale(1)",
                   boxShadow:
-                    isHoveringCallWaiter && !callWaiterMutation.isPending
+                    isHoveringCallWaiter && !isCallingWaiter
                       ? "0 4px 12px rgba(255, 255, 255, 0.2)"
                       : "none",
                 }}
               >
-                {callWaiterMutation.isPending ? "Calling..." : "Call Waiter"}
+                {isCallingWaiter ? "Calling..." : "Call Waiter"}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Error Notifications */}
+        {/* Notifications */}
+        {info && (
+          <div
+            style={{
+              margin: "16px 16px 0",
+              padding: "12px 16px",
+              background: "#e8f4fd",
+              color: "#2980b9",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            {info}
+          </div>
+        )}
+
         {error && order && (
           <div
             style={{
