@@ -56,12 +56,12 @@ export const useCreateOrderMutation = () => {
 export const useRequestBillMutation = () => {
   const queryClient = useQueryClient();
 
-  return useSafeMutation(() => requestBill(), {
+  return useSafeMutation((orderId: string) => requestBill(orderId), {
     successMessage: "Bill requested. A staff member will assist you shortly.",
     errorMessage: "Failed to request bill",
-    onSuccess: (data) => {
-      // Update the active order query cache with new status
-      queryClient.setQueryData<Order>(ORDER_QUERY_KEYS.active(), data);
+    onSuccess: () => {
+      // Invalidate the active order query to refetch updated data
+      queryClient.invalidateQueries({ queryKey: ORDER_QUERY_KEYS.active() });
     },
   });
 };

@@ -84,17 +84,6 @@ export async function cancelBillRequest(): Promise<ApiResponse> {
 }
 
 /**
- * Cancel bill request (change order status back to served)
- */
-export async function cancelBillRequest(): Promise<ApiResponse> {
-  const response = await apiRequest.post<unknown, ApiResponse>(
-    "/orders/guest/cancel-bill",
-    {},
-  );
-  return response.data;
-}
-
-/**
  * Call waiter for current table
  */
 export async function callWaiter(): Promise<ApiResponse> {
