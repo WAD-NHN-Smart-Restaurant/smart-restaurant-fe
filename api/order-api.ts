@@ -62,11 +62,22 @@ export async function getCurrentOrder(): Promise<ApiResponse> {
 }
 
 /**
- * Request bill (change order status to payment_pending)
+ * Request bill (change order status to payment_pending and create payment)
  */
-export async function requestBill(): Promise<ApiResponse> {
+export async function requestBill(orderId: string): Promise<ApiResponse> {
   const response = await apiRequest.post<unknown, ApiResponse>(
     "/orders/guest/request-bill",
+    { orderId },
+  );
+  return response.data;
+}
+
+/**
+ * Cancel bill request (change order status back to served)
+ */
+export async function cancelBillRequest(): Promise<ApiResponse> {
+  const response = await apiRequest.post<unknown, ApiResponse>(
+    "/orders/guest/cancel-bill",
     {},
   );
   return response.data;

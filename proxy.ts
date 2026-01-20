@@ -27,6 +27,12 @@ function isMatchRoute(routes: string[], pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // TODO: Remove fallback env token for server-side in production
+  const guestToken =
+    request.cookies.get("guest_menu_token") ||
+    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+  // console.log("Guest Token in Middleware:", guestToken);
+  //const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
 
   if (isMatchRoute(PUBLIC_ROUTES, pathname) || isMatchRoute(GUEST_ROUTES, pathname)) {
     return NextResponse.next();
