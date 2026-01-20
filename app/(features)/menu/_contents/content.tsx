@@ -341,8 +341,8 @@ export function GuestMenuPreviewContent() {
               {menuItems.map((item) => {
                 // Get primary photo or first photo
                 const primaryPhoto =
-                  item.menuItemPhotos.find((photo) => photo.isPrimary) ||
-                  item.menuItemPhotos[0];
+                  item.menuItemPhotos?.find((photo) => photo.isPrimary) ||
+                  item.menuItemPhotos?.[0];
 
                 const isAvailable = item.status === "available";
                 return (
