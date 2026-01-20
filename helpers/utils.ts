@@ -1,4 +1,10 @@
 import { AUTH_PATHS, PROTECTED_PATHS, PUBLIC_PATHS } from "@/data/path";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 type PathType = "auth" | "protected" | "public";
 

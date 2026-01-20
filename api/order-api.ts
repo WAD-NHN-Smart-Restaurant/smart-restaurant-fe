@@ -82,3 +82,73 @@ export async function callWaiter(): Promise<ApiResponse> {
   );
   return response.data;
 }
+
+/**
+ * Get customer order history (requires authentication)
+ */
+export async function getOrderHistory(
+  page = 1,
+  limit = 20,
+): Promise<ApiResponse> {
+  const response = await apiRequest.get<ApiResponse>(
+    `/orders/customer/history?page=${page}&limit=${limit}`,
+  );
+  return response.data;
+}
+
+/**
+ * Get order details with item processing statuses (requires authentication)
+ */
+export async function getOrderDetails(orderId: string): Promise<ApiResponse> {
+  const response = await apiRequest.get<ApiResponse>(
+    `/orders/customer/order-details/${orderId}`,
+  );
+  return response.data;
+}
+
+/**
+ * Create a review for a menu item (requires authentication)
+ */
+export interface CreateReviewRequest {
+  menuItemId: string;
+  orderId: string;
+  rating: number;
+  comment?: string;
+}
+
+export async function createReview(
+  request: CreateReviewRequest,
+): Promise<ApiResponse> {
+  const response = await apiRequest.post<
+    CreateReviewRequest,
+    ApiResponse<unknown>
+  >("/orders/customer/reviews", request);
+  return response.data as ApiResponse;
+}
+
+/**
+ * Get customer's reviews (requires authentication)
+ */
+export async function getCustomerReviews(
+  page = 1,
+  limit = 20,
+): Promise<ApiResponse> {
+  const response = await apiRequest.get<ApiResponse>(
+    `/orders/customer/reviews?page=${page}&limit=${limit}`,
+  );
+  return response.data;
+}
+
+/**
+ * Get reviews for a menu item (public)
+ */
+export async function getMenuItemReviews(
+  menuItemId: string,
+  page = 1,
+  limit = 10,
+): Promise<ApiResponse> {
+  const response = await apiRequest.get<ApiResponse>(
+    `/orders/menu-items/${menuItemId}/reviews?page=${page}&limit=${limit}`,
+  );
+  return response.data;
+}

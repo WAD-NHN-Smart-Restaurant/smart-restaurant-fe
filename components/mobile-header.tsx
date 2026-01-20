@@ -12,15 +12,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon, Menu, ArrowLeft } from "lucide-react";
 import { AUTH_PATHS } from "@/data/path";
 
 interface MobileHeaderProps {
   title: string;
   tableNumber?: string;
+  onBack?: () => void;
+  showLeftMenu?: boolean;
 }
 
-export function MobileHeader({ title, tableNumber }: MobileHeaderProps) {
+export function MobileHeader({
+  title,
+  tableNumber,
+  onBack,
+  showLeftMenu,
+}: MobileHeaderProps) {
   const router = useRouter();
   const { user, isAuthenticated, logout, isLoading } = useAuth();
   const [mounted, setMounted] = useState(false);
@@ -47,9 +54,77 @@ export function MobileHeader({ title, tableNumber }: MobileHeaderProps) {
 
   return (
     <div className="header" suppressHydrationWarning>
-      <span className="header-title">{title}</span>
+      {/* Left side: Back button or Menu dropdown */}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}
+      >
+        {showLeftMenu && mounted && isAuthenticated && user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  color: "white",
+                  fontSize: "20px",
+                }}
+              >
+                <Menu style={{ width: "24px", height: "24px" }} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              style={{ minWidth: "150px", zIndex: 9999 }}
+            >
+              <DropdownMenuItem
+                onClick={() => router.push("/order-history")}
+                style={{ cursor: "pointer" }}
+              >
+                Order History
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push("/order-history?tab=reviews")}
+                style={{ cursor: "pointer" }}
+              >
+                My Reviews
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : onBack ? (
+          <button
+            onClick={onBack}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              color: "white",
+            }}
+          >
+            <ArrowLeft style={{ width: "24px", height: "24px" }} />
+          </button>
+        ) : null}
+      </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <span className="header-title" style={{ flex: 1, textAlign: "center" }}>
+        {title}
+      </span>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          flex: 1,
+          justifyContent: "flex-end",
+        }}
+      >
         {mounted && tableNumber && (
           <span className="header-table" suppressHydrationWarning>
             Table {tableNumber}

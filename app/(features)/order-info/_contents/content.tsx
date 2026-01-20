@@ -687,7 +687,11 @@ export function OrderInfoContent() {
 
   return (
     <MobileLayout>
-      <MobileHeader title="Your Orders" tableNumber={tableNumber} />
+      <MobileHeader
+        title="Your Orders"
+        tableNumber={tableNumber}
+        showLeftMenu={isCustomer}
+      />
 
       <div style={{ paddingBottom: "80px", background: "#f8f9fa" }}>
         {/* Session Summary Card */}
