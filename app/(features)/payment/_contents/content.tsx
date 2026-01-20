@@ -632,11 +632,9 @@ export function PaymentContent() {
 
     return () => {
       if (pollingIntervalRef.current) {
-        console.log("[Payment Poll] Stopping polling");
         clearInterval(pollingIntervalRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentId, paymentStatus]);
 
   // If returning from checkout with paid flag, show bill preview
@@ -1034,8 +1032,8 @@ export function PaymentContent() {
             className="waiting-text"
             style={{ color: "#667085", fontSize: "14px", lineHeight: "1.5" }}
           >
-            The system has sent a bill creation request to the staff member,
-            please wait a moment.
+            The system has sent a bill request to the staff member, please wait
+            a moment.
           </div>
         </div>
       </MobileLayout>

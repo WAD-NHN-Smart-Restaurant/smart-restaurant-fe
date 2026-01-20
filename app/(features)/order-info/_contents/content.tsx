@@ -537,7 +537,51 @@ export function OrderInfoContent() {
         setIsLoading(true);
         setError(null);
         const response = await getCurrentOrder();
-        if (!response?.success) {
+        // Response has structure: {success, data: {status, data: RawOrder}}
+        if (response?.success) {
+          const raw = response.data as any; // Backend may return camelCase or snake_case
+
+          // Handle both camelCase (new) and snake_case (old) responses
+          const orderItems = raw.orderItems || raw.order_items || [];
+
+          const mappedItems = orderItems.map((it: any) => ({
+            id: it.id,
+            menuItemId: it.menuItemId || it.menu_item_id,
+            menuItemName: it.menuItemName || it.menu_item_name || undefined,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice || it.unit_price,
+            specialRequest:
+              it.notes || it.specialRequest || it.special_request || undefined,
+            status: it.status,
+            options: (it.orderItemOptions || it.order_item_options || []).map(
+              (op: any) => ({
+                id: op.id,
+                optionName: op.optionName || op.option_name || undefined,
+                priceAtTime: op.priceAtTime || op.price_at_time,
+              }),
+            ),
+          }));
+
+          const mapped: Order = {
+            id: raw.id,
+            tableId: raw.tableId || raw.table_id,
+            status: raw.status,
+            guestName: raw.guestName || raw.guest_name || undefined,
+            notes:
+              raw.notes ||
+              raw.specialRequest ||
+              raw.special_request ||
+              undefined,
+            createdAt: raw.createdAt || raw.created_at,
+            orderItems: mappedItems,
+            // Prefer backend total_amount/totalAmount when provided, otherwise compute locally
+            totalAmount:
+              raw.totalAmount ??
+              raw.total_amount ??
+              computeOrderTotals(mappedItems),
+          };
+          setOrder(mapped);
+        } else {
           setError("Unable to load order information");
           return;
         }
@@ -662,7 +706,8 @@ export function OrderInfoContent() {
     try {
       setError(null);
       setInfo(null);
-      const response = await requestBill(order.id);
+      setError(null);
+      const response = await requestBill();
       if (response?.success && response.data?.status) {
         // Save order ID to session storage for payment page
         if (typeof window !== "undefined") {
@@ -796,7 +841,11 @@ export function OrderInfoContent() {
 
   return (
     <MobileLayout>
-      <MobileHeader title="Your Orders" tableNumber={tableNumber} />
+      <MobileHeader
+        title="Your Orders"
+        tableNumber={tableNumber}
+        showLeftMenu={isCustomer}
+      />
 
       <div style={{ paddingBottom: "80px", background: "#f8f9fa" }}>
         {/* Session Summary Card */}
