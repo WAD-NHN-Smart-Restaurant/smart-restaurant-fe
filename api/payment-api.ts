@@ -36,7 +36,7 @@ export type PaymentStatusResponse = {
   paymentMethod?: string | null;
   stripeSessionId?: string | null;
   checkoutUrl?: string | null;
-  metadata?: any;
+  metadata?: Record<string, unknown> | null;
   currency?: string | null;
   createdAt?: string;
   updatedAt?: string;

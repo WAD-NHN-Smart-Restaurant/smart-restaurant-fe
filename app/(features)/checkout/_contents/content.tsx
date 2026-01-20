@@ -26,7 +26,8 @@ export function CheckoutContent() {
   useEffect(() => {
     const saved = localStorage.getItem("guest_table_number");
     if (saved) {
-      setTableNumber(saved);
+      // Use a callback to set the state asynchronously
+      setTimeout(() => setTableNumber(saved), 0);
     }
   }, []);
 
