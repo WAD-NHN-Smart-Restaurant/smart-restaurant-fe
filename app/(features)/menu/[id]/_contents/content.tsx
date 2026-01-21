@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,20 @@ import { useGuestMenuQuery } from "../../_contents/use-guest-menu-query";
 import { useRecommendationsQuery } from "../../_contents/use-recommendations-query";
 import { MobileLayout } from "@/components/mobile-layout";
 import { LoadingState } from "../../_components/loading-state";
+import { getMenuItemReviews } from "@/api/order-api";
 
 interface SelectedModifiers {
   [groupId: string]: string[];
+}
+
+interface MenuItemReview {
+  id: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+  profiles: {
+    fullName: string;
+  };
 }
 
 export function MenuItemDetailContent({ itemId }: { itemId: string }) {
@@ -43,6 +54,8 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
   );
   const [specialRequest, setSpecialRequest] = useState("");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [reviews, setReviews] = useState<MenuItemReview[]>([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
   const [imageError, setImageError] = useState(false);
 
   // Fetch all menu items and find the specific item
@@ -60,6 +73,25 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
     const items = data.data.items as GuestMenuItem[];
     return items.find((menuItem) => menuItem.id === itemId) || null;
   }, [data, itemId]);
+
+  // Fetch reviews for this item
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!itemId) return;
+      try {
+        setIsLoadingReviews(true);
+        const response = await getMenuItemReviews(itemId, 1, 10);
+        if (response.success && response.data) {
+          setReviews(response.data.items || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch reviews:", error);
+      } finally {
+        setIsLoadingReviews(false);
+      }
+    };
+    fetchReviews();
+  }, [itemId]);
 
   // Calculate total price with modifiers
   const totalPrice = useMemo(() => {
@@ -322,6 +354,38 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
               <span className="text-sm">{item.prepTimeMinutes} mins</span>
             </div>
           </div>
+
+          {/* Rating Display */}
+          {item.averageRating && item.reviewCount ? (
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center text-yellow-500">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Star
+                    key={i}
+                    className={`h-5 w-5 ${
+                      i < Math.round(item.averageRating || 0)
+                        ? "fill-current"
+                        : "stroke-current fill-none"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-sm text-gray-600">
+                {item.averageRating.toFixed(1)} ({item.reviewCount}{" "}
+                {item.reviewCount === 1 ? "review" : "reviews"})
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mb-3 text-gray-400">
+              <div className="flex items-center">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Star key={i} className="h-5 w-5 stroke-current fill-none" />
+                ))}
+              </div>
+              <span className="text-sm">No reviews yet</span>
+            </div>
+          )}
+
           {item.description && (
             <p className="text-gray-600 leading-relaxed">{item.description}</p>
           )}
@@ -462,6 +526,55 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Reviews Section */}
+        {reviews.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg">Customer Reviews</h3>
+            <div className="space-y-3">
+              {reviews.map((review) => (
+                <Card key={review.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                          {review.profiles?.fullName?.[0]?.toUpperCase() || "?"}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {review.profiles?.fullName || "Anonymous"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(review.createdAt).toLocaleDateString("en-US", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              },
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center text-yellow-500">
+                        {Array.from({ length: 5 }, (_, i) => (
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${
+                              i < review.rating
+                                ? "fill-current"
+                                : "stroke-current fill-none"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    {review.comment && (
+                      <p className="text-sm text-gray-600 leading-relaxed">
+                        {review.comment}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
         {/* Recommended Items */}
         {recommendations.length > 0 && (
           <div className="space-y-4">
