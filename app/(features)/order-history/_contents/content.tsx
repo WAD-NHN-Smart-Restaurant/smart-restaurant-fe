@@ -8,6 +8,9 @@ import {
   getOrderDetails,
   createReview,
   getCustomerReviews,
+  type OrderHistoryDto,
+  type ReviewWithRelations,
+  type OrderDetailResponse,
 } from "@/api/order-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -51,22 +54,22 @@ interface OrderHistoryItem {
 interface OrderDetailItem {
   id: string;
   quantity: number;
-  unit_price: number;
+  unitPrice: number;
   note?: string;
   status: string;
-  menu_items: {
+  menuItems: {
     id: string;
     name: string;
     description?: string;
-    menu_item_photos?: Array<{
+    menuItemPhotos?: Array<{
       url: string;
-      is_primary: boolean;
+      isPrimary: boolean;
     }>;
   };
-  order_item_options?: Array<{
+  orderItemOptions?: Array<{
     id: string;
-    price_at_time: number;
-    modifier_options: {
+    priceAtTime: number;
+    modifierOptions: {
       name: string;
     };
   }>;
@@ -81,9 +84,9 @@ interface OrderDetail {
   createdAt: string;
   updatedAt: string;
   tables?: {
-    table_number: string;
+    tableNumber: string;
   };
-  order_items: OrderDetailItem[];
+  orderItems: OrderDetailItem[];
 }
 
 interface Review {
@@ -92,17 +95,17 @@ interface Review {
   comment?: string;
   createdAt: string;
   updatedAt: string;
-  menu_items: {
+  menuItems: {
     id: string;
     name: string;
-    menu_item_photos?: Array<{
+    menuItemPhotos?: Array<{
       url: string;
-      is_primary: boolean;
+      isPrimary: boolean;
     }>;
   };
   orders: {
     id: string;
-    created_at: string;
+    createdAt: string;
   };
 }
 
@@ -110,9 +113,10 @@ export function OrderHistoryContent() {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
   const [activeTab, setActiveTab] = useState("orders");
-  const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
+  const [orders, setOrders] = useState<OrderHistoryDto[]>([]);
+  const [reviews, setReviews] = useState<ReviewWithRelations[]>([]);
+  const [selectedOrder, setSelectedOrder] =
+    useState<OrderDetailResponse | null>(null);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
@@ -151,8 +155,8 @@ export function OrderHistoryContent() {
     try {
       setIsLoadingOrders(true);
       const response = await getOrderHistory(1, 50);
-      if (response.success && response.data.status) {
-        setOrders(response.data.data as OrderHistoryItem[]);
+      if (response.success && response.data) {
+        setOrders(response.data.items);
       }
     } catch (error) {
       console.error("Failed to fetch order history:", error);
@@ -166,8 +170,8 @@ export function OrderHistoryContent() {
     try {
       setIsLoadingReviews(true);
       const response = await getCustomerReviews(1, 50);
-      if (response.success && response.data.status) {
-        setReviews(response.data.data as Review[]);
+      if (response.success && response.data) {
+        setReviews(response.data.items);
       }
     } catch (error) {
       console.error("Failed to fetch reviews:", error);
@@ -180,8 +184,8 @@ export function OrderHistoryContent() {
   const handleViewOrderDetails = async (orderId: string) => {
     try {
       const response = await getOrderDetails(orderId);
-      if (response.success && response.data.status) {
-        setSelectedOrder(response.data.data as OrderDetail);
+      if (response.success && response.data) {
+        setSelectedOrder(response.data);
         setIsDetailDialogOpen(true);
       }
     } catch (error) {
@@ -221,7 +225,7 @@ export function OrderHistoryContent() {
         comment: reviewForm.comment,
       });
 
-      if (response.success && response.data.status) {
+      if (response.success && response.data) {
         alert("Review submitted successfully!");
         setIsReviewDialogOpen(false);
         setReviewForm({
@@ -377,75 +381,6 @@ export function OrderHistoryContent() {
                     )}
                   </div>
 
-                  {/* Order Items */}
-                  {order.orderItems && order.orderItems.length > 0 && (
-                    <div className="space-y-3 mb-3 border-t pt-3">
-                      {order.orderItems.map((item) => {
-                        const primaryPhoto =
-                          item.menu_items.menu_item_photos?.find(
-                            (p) => p.is_primary,
-                          );
-                        const photoUrl =
-                          primaryPhoto?.url ||
-                          item.menu_items.menu_item_photos?.[0]?.url;
-
-                        const itemTotal =
-                          item.unit_price * item.quantity +
-                          (item.order_item_options?.reduce(
-                            (sum, opt) => sum + opt.price_at_time,
-                            0,
-                          ) || 0) *
-                            item.quantity;
-
-                        return (
-                          <div key={item.id} className="flex gap-3">
-                            {photoUrl && (
-                              <Image
-                                src={photoUrl}
-                                alt={item.menu_items.name}
-                                width={60}
-                                height={60}
-                                className="w-15 h-15 object-cover rounded-lg"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <h4 className="font-medium text-sm">
-                                    {item.menu_items.name}
-                                  </h4>
-                                  <p className="text-xs text-gray-600">
-                                    Qty: {item.quantity}
-                                  </p>
-                                </div>
-                                <span className="text-sm font-semibold text-orange-600 ml-2">
-                                  {formatPrice(itemTotal)}
-                                </span>
-                              </div>
-
-                              {item.order_item_options &&
-                                item.order_item_options.length > 0 && (
-                                  <div className="text-xs text-gray-600 mt-1">
-                                    {item.order_item_options.map((opt) => (
-                                      <div key={opt.id}>
-                                        + {opt.modifier_options.name}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-
-                              {item.note && (
-                                <p className="text-xs text-gray-600 italic mt-1">
-                                  Note: {item.note}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
                   <div className="flex justify-between items-center pt-3 border-t">
                     <span className="text-sm text-gray-600">
                       {order.orderItemsCount} item
@@ -475,12 +410,12 @@ export function OrderHistoryContent() {
               </Card>
             ) : (
               reviews.map((review) => {
-                const primaryPhoto = review.menu_items.menu_item_photos?.find(
-                  (p) => p.is_primary,
+                const primaryPhoto = review.menuItems.menuItemPhotos?.find(
+                  (p) => p.isPrimary,
                 );
                 const photoUrl =
                   primaryPhoto?.url ||
-                  review.menu_items.menu_item_photos?.[0]?.url;
+                  review.menuItems.menuItemPhotos?.[0]?.url;
 
                 return (
                   <Card key={review.id} className="p-4">
@@ -488,7 +423,7 @@ export function OrderHistoryContent() {
                       {photoUrl && (
                         <Image
                           src={photoUrl}
-                          alt={review.menu_items.name}
+                          alt={review.menuItems.name}
                           width={80}
                           height={80}
                           className="w-20 h-20 object-cover rounded-lg"
@@ -496,7 +431,7 @@ export function OrderHistoryContent() {
                       )}
                       <div className="flex-1">
                         <h3 className="font-semibold mb-1">
-                          {review.menu_items.name}
+                          {review.menuItems.name}
                         </h3>
                         {renderStars(review.rating)}
                         {review.comment && (
@@ -528,7 +463,7 @@ export function OrderHistoryContent() {
                   Order #{selectedOrder.id.slice(0, 8)} •{" "}
                   {formatDate(selectedOrder.createdAt)}
                   {selectedOrder.tables && (
-                    <> • Table {selectedOrder.tables.table_number}</>
+                    <> • Table {selectedOrder.tables.tableNumber}</>
                   )}
                 </>
               )}
@@ -537,18 +472,16 @@ export function OrderHistoryContent() {
 
           {selectedOrder && (
             <div className="space-y-4 mt-4">
-              {selectedOrder.order_items.map((item) => {
-                const primaryPhoto = item.menu_items.menu_item_photos?.find(
-                  (p) => p.is_primary,
+              {selectedOrder.orderItems.map((item) => {
+                const primaryPhoto = item.menuItems.menuItemPhotos?.find(
+                  (p) => p.isPrimary,
                 );
                 const photoUrl =
-                  primaryPhoto?.url ||
-                  item.menu_items.menu_item_photos?.[0]?.url;
-
+                  primaryPhoto?.url || item.menuItems.menuItemPhotos?.[0]?.url;
                 const itemTotal =
-                  item.unit_price * item.quantity +
-                  (item.order_item_options?.reduce(
-                    (sum, opt) => sum + opt.price_at_time,
+                  item.unitPrice * item.quantity +
+                  (item.orderItemOptions?.reduce(
+                    (sum, opt) => sum + opt.priceAtTime,
                     0,
                   ) || 0) *
                     item.quantity;
@@ -559,7 +492,7 @@ export function OrderHistoryContent() {
                       {photoUrl && (
                         <Image
                           src={photoUrl}
-                          alt={item.menu_items.name}
+                          alt={item.menuItems.name}
                           width={80}
                           height={80}
                           className="w-20 h-20 object-cover rounded-lg"
@@ -569,7 +502,7 @@ export function OrderHistoryContent() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <h3 className="font-semibold">
-                              {item.menu_items.name}
+                              {item.menuItems.name}
                             </h3>
                             <p className="text-sm text-gray-600">
                               Qty: {item.quantity}
@@ -580,21 +513,21 @@ export function OrderHistoryContent() {
                           </Badge>
                         </div>
 
-                        {item.order_item_options &&
-                          item.order_item_options.length > 0 && (
+                        {item.orderItemOptions &&
+                          item.orderItemOptions.length > 0 && (
                             <div className="text-sm text-gray-600 mb-2">
-                              {item.order_item_options.map((opt) => (
+                              {item.orderItemOptions.map((opt) => (
                                 <div key={opt.id}>
-                                  + {opt.modifier_options.name} (+
-                                  {formatPrice(opt.price_at_time)})
+                                  + {opt.modifierOptions.name} (+
+                                  {formatPrice(opt.priceAtTime)})
                                 </div>
                               ))}
                             </div>
                           )}
 
-                        {item.note && (
+                        {item.notes && (
                           <p className="text-sm text-gray-600 italic mb-2">
-                            Note: {item.note}
+                            Note: {item.notes}
                           </p>
                         )}
 
@@ -608,8 +541,8 @@ export function OrderHistoryContent() {
                               variant="outline"
                               onClick={() =>
                                 handleOpenReviewDialog(
-                                  item.menu_items.id,
-                                  item.menu_items.name,
+                                  item.menuItems.id,
+                                  item.menuItems.name,
                                   selectedOrder.id,
                                 )
                               }

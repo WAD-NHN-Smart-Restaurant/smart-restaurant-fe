@@ -4,10 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   getCurrentOrder,
   createOrder,
+  createOrderAsCustomer,
   requestBill,
   callWaiter,
 } from "@/api/order-api";
 import type { Order, CreateOrderRequest } from "@/types/order-type";
+import type { ApiResponse } from "@/types/api-type";
 
 // Query keys for order-related queries
 const ORDER_QUERY_KEYS = {
@@ -24,21 +26,44 @@ export const useActiveOrderQuery = () => {
   const hasTableId =
     typeof window !== "undefined" && !!localStorage.getItem("guest_table_id");
 
-  return useSafeQuery(ORDER_QUERY_KEYS.active(), () => getCurrentOrder(), {
-    staleTime: 30 * 1000, // 30 seconds - orders change frequently
-    enabled: hasTableId, // Only fetch if tableId exists
-    hideErrorSnackbar: true, // Handle errors manually in the component
-  });
+  return useSafeQuery<ApiResponse<Order>>(
+    ORDER_QUERY_KEYS.active(),
+    () => getCurrentOrder(),
+    {
+      staleTime: 30 * 1000, // 30 seconds - orders change frequently
+      enabled: hasTableId, // Only fetch if tableId exists
+      hideErrorSnackbar: true, // Handle errors manually in the component
+    },
+  );
 };
 
 /**
- * Hook to create a new order or add items to existing order
+ * Hook to create a new order or add items to existing order (Guest)
  */
 export const useCreateOrderMutation = () => {
   const queryClient = useQueryClient();
 
-  return useSafeMutation(
+  return useSafeMutation<ApiResponse<Order>, CreateOrderRequest>(
     (request: CreateOrderRequest) => createOrder(request),
+    {
+      successMessage: "Order placed successfully!",
+      errorMessage: "Failed to place order",
+      onSuccess: () => {
+        // Invalidate active order query to refetch
+        queryClient.invalidateQueries({ queryKey: ORDER_QUERY_KEYS.active() });
+      },
+    },
+  );
+};
+
+/**
+ * Hook to create a new order or add items to existing order (Authenticated Customer)
+ */
+export const useCreateOrderAsCustomerMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useSafeMutation<ApiResponse<Order>, CreateOrderRequest>(
+    (request: CreateOrderRequest) => createOrderAsCustomer(request),
     {
       successMessage: "Order placed successfully!",
       errorMessage: "Failed to place order",
@@ -56,22 +81,28 @@ export const useCreateOrderMutation = () => {
 export const useRequestBillMutation = () => {
   const queryClient = useQueryClient();
 
-  return useSafeMutation((orderId: string) => requestBill(orderId), {
-    successMessage: "Bill requested. A staff member will assist you shortly.",
-    errorMessage: "Failed to request bill",
-    onSuccess: () => {
-      // Invalidate the active order query to refetch updated data
-      queryClient.invalidateQueries({ queryKey: ORDER_QUERY_KEYS.active() });
+  return useSafeMutation<ApiResponse<Order>, string>(
+    (orderId: string) => requestBill(orderId),
+    {
+      successMessage: "Bill requested. A staff member will assist you shortly.",
+      errorMessage: "Failed to request bill",
+      onSuccess: () => {
+        // Invalidate the active order query to refetch updated data
+        queryClient.invalidateQueries({ queryKey: ORDER_QUERY_KEYS.active() });
+      },
     },
-  });
+  );
 };
 
 /**
  * Hook to call waiter
  */
 export const useCallWaiterMutation = () => {
-  return useSafeMutation(() => callWaiter(), {
-    successMessage: "Waiter notified. Please stay seated.",
-    errorMessage: "Failed to call waiter",
-  });
+  return useSafeMutation<ApiResponse<{ message: string }>, void>(
+    () => callWaiter(),
+    {
+      successMessage: "Waiter notified. Please stay seated.",
+      errorMessage: "Failed to call waiter",
+    },
+  );
 };

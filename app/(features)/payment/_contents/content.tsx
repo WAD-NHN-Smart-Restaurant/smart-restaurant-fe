@@ -14,6 +14,7 @@ import {
 import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
 import { formatPrice } from "@/utils/format";
+import type { Order, OrderItem } from "@/types/order-type";
 // import { useAuth } from "@/context/auth-context";
 
 // Helper function to extract error message from various error types
@@ -63,109 +64,14 @@ const getErrorMessage = (err: unknown): string => {
   return "An unexpected error occurred";
 };
 
-interface OrderItem {
-  id: string;
-  menuItemId: string;
-  menuItemName?: string;
-  quantity: number;
-  unitPrice: number;
-  specialRequest?: string;
-  status: string;
-  options?: Array<{
-    id: string;
-    optionName?: string;
-    priceAtTime: number;
-  }>;
-}
-
-interface Order {
-  id: string;
-  tableId: string;
-  status: "active" | "served" | "payment_pending" | "completed" | "cancelled";
-  guestName?: string;
-  notes?: string;
-  totalAmount: number;
-  createdAt: string;
-  orderItems: OrderItem[];
-}
-
 const computeOrderTotals = (items: OrderItem[]) => {
   return items.reduce((sum, item) => {
-    const optionsTotal = (item.options || []).reduce(
+    const optionsTotal = (item.orderItemOptions || []).reduce(
       (optSum, opt) => optSum + opt.priceAtTime,
       0,
     );
     return sum + item.quantity * (item.unitPrice + optionsTotal);
   }, 0);
-};
-
-type RawOrder = {
-  id: string;
-  tableId?: string;
-  table_id?: string;
-  status: string;
-  guestName?: string | null;
-  guest_name?: string | null;
-  specialRequest?: string | null;
-  special_request?: string | null;
-  totalAmount?: number | null;
-  total_amount?: number | null;
-  createdAt: string;
-  created_at?: string;
-  orderItems?: Array<{
-    id: string;
-    menuItemId?: string;
-    menu_item_id?: string;
-    menuItemName?: string | null;
-    menu_item_name?: string | null;
-    quantity: number;
-    unitPrice?: number;
-    unit_price?: number;
-    specialRequest?: string | null;
-    special_request?: string | null;
-    status: string;
-    orderItemOptions?: Array<{
-      id: string;
-      optionName?: string | null;
-      option_name?: string | null;
-      priceAtTime?: number;
-      price_at_time?: number;
-    }>;
-    order_item_options?: Array<{
-      id: string;
-      optionName?: string | null;
-      option_name?: string | null;
-      priceAtTime?: number;
-      price_at_time?: number;
-    }>;
-  }>;
-  order_items?: Array<{
-    id: string;
-    menuItemId?: string;
-    menu_item_id?: string;
-    menuItemName?: string | null;
-    menu_item_name?: string | null;
-    quantity: number;
-    unitPrice?: number;
-    unit_price?: number;
-    specialRequest?: string | null;
-    special_request?: string | null;
-    status: string;
-    orderItemOptions?: Array<{
-      id: string;
-      optionName?: string | null;
-      option_name?: string | null;
-      priceAtTime?: number;
-      price_at_time?: number;
-    }>;
-    order_item_options?: Array<{
-      id: string;
-      optionName?: string | null;
-      option_name?: string | null;
-      priceAtTime?: number;
-      price_at_time?: number;
-    }>;
-  }>;
 };
 
 export function PaymentContent() {
@@ -215,7 +121,7 @@ export function PaymentContent() {
   // Calculated totals
   const subtotal = useMemo(() => {
     if (!order) return 0;
-    return computeOrderTotals(order.orderItems);
+    return computeOrderTotals(order.orderItems || []);
   }, [order]);
 
   // Use discount from payment data, not from user input
@@ -291,82 +197,37 @@ export function PaymentContent() {
       const result = await getCurrentOrder();
       console.log("[Order Fetch] Raw response:", result);
 
-      // Handle both response formats
-      const successFlag = result?.success || result?.data?.status;
-      const controller = result?.data;
-      const raw = (controller?.data || result) as RawOrder;
-
-      console.log("[Order Fetch] Response structure:", {
-        hasSuccess: !!result?.success,
-        hasData: !!result?.data,
-        hasStatus: !!controller?.status,
-        rawKeys: raw ? Object.keys(raw).slice(0, 10) : "N/A",
-      });
-
-      if (successFlag && raw) {
-        console.log("[Order Fetch] Response is success, parsing order data...");
+      // Backend returns: { success: boolean, data: Order, message?: string }
+      if (result?.success && result.data) {
+        const order = result.data;
         console.log("[Order Fetch] Order data:", {
-          id: raw.id,
-          status: raw.status,
-          itemCount: (raw.orderItems || raw.order_items || []).length,
-          totalAmount: raw.totalAmount || raw.total_amount,
+          id: order.id,
+          status: order.status,
+          itemCount: (order.orderItems || []).length,
+          totalAmount: order.totalAmount,
         });
 
         // Accept both 'active' and 'payment_pending' statuses
         const validStatuses = ["active", "payment_pending", "served"];
-        if (!validStatuses.includes(raw.status)) {
+        if (!validStatuses.includes(order.status)) {
           console.warn(
             "[Order Fetch] Order status not valid for payment:",
-            raw.status,
+            order.status,
           );
           return null;
         }
 
-        // Normalize with both camelCase and snake_case field support
-        const items = raw.orderItems || raw.order_items || [];
-        console.log("[Order Fetch] Processing", items.length, "items");
-
-        const normalized: Order = {
-          id: raw.id,
-          tableId: raw.tableId || raw.table_id || "",
-          status: (raw.status as Order["status"]) || "active",
-          guestName: raw.guestName || raw.guest_name || undefined,
-          notes: raw.specialRequest || raw.special_request || undefined,
-          totalAmount: raw.totalAmount || raw.total_amount || 0,
-          createdAt: raw.createdAt || raw.created_at || "",
-          orderItems: items.map((item) => ({
-            id: item.id,
-            menuItemId: item.menuItemId || item.menu_item_id || "",
-            menuItemName: item.menuItemName || item.menu_item_name || "Item",
-            quantity: item.quantity,
-            unitPrice: item.unitPrice || item.unit_price || 0,
-            specialRequest:
-              item.specialRequest || item.special_request || undefined,
-            status: (item.status as OrderItem["status"]) || "active",
-            options: (
-              item.orderItemOptions ||
-              item.order_item_options ||
-              []
-            ).map((opt) => ({
-              id: opt.id,
-              optionName: opt.optionName || opt.option_name || "Option",
-              priceAtTime: opt.priceAtTime || opt.price_at_time || 0,
-            })),
-          })),
-        };
-
-        console.log("[Order Fetch] ✅ Order normalized successfully:", {
-          orderId: normalized.id,
-          itemsCount: normalized.orderItems.length,
-          total: normalized.totalAmount,
+        console.log("[Order Fetch] ✅ Order fetched successfully:", {
+          orderId: order.id,
+          itemsCount: order.orderItems?.length || 0,
+          total: order.totalAmount,
         });
 
-        return normalized;
+        return order;
       } else {
         console.warn("[Order Fetch] Response structure invalid:", {
           hasSuccess: !!result?.success,
-          hasController: !!controller,
-          hasRaw: !!raw,
+          hasData: !!result?.data,
           resultKeys: result ? Object.keys(result) : "N/A",
         });
 
@@ -596,7 +457,7 @@ export function PaymentContent() {
             setIsWaitingForBill(false);
 
             // Refetch order to ensure we have latest order items
-            if (!order || order.orderItems.length === 0) {
+            if (!order || !order.orderItems || order.orderItems.length === 0) {
               console.log(
                 "[Payment Poll] Order empty or missing, refetching...",
               );
@@ -729,29 +590,18 @@ export function PaymentContent() {
       const response = await requestBill(order.id);
       console.log("Request bill response:", response);
 
-      const isSuccess = (response?.success ||
-        response?.data?.status) as boolean;
-      const rawPayment = (response?.data?.data || response?.data) as Record<
-        string,
-        unknown
-      >;
-      const paymentData: PaymentStatusResponse = {
-        ...(rawPayment || {}),
-        discountRate: ((rawPayment?.discountRate as number) ?? 0) as number,
-        discountAmount: ((rawPayment?.discountAmount as number) ?? 0) as number,
-      } as PaymentStatusResponse;
-
-      if (isSuccess && paymentData?.id) {
-        console.log("Bill request successful, payment created:", {
-          paymentId: paymentData.id,
-          status: paymentData.status,
+      if (response?.success && response?.data) {
+        console.log("Bill request successful, order updated:", {
+          orderId: response.data.id,
+          status: response.data.status,
         });
-        setPaymentId(paymentData.id);
-        setPaymentStatus("created");
-        setPaymentData(paymentData);
+        // Update order status
+        setOrder(response.data);
+        // Mark waiting for bill to be accepted by waiter
         setIsWaitingForBill(true);
+        setPaymentStatus("created");
       } else {
-        setError(response?.data?.message || "Failed to request bill");
+        setError("Failed to request bill");
       }
     } catch (err: unknown) {
       const message = getErrorMessage(err) || "Error requesting bill";
@@ -1162,8 +1012,8 @@ export function PaymentContent() {
             {/* Order Items */}
             <div style={{ marginBottom: "16px" }}>
               {order?.orderItems?.length ? (
-                order.orderItems.map((item) => {
-                  const optionsTotal = (item.options || []).reduce(
+                order.orderItems?.map((item) => {
+                  const optionsTotal = (item.orderItemOptions || []).reduce(
                     (sum, opt) => sum + opt.priceAtTime,
                     0,
                   );
@@ -1206,21 +1056,22 @@ export function PaymentContent() {
                         </span>
                       </div>
 
-                      {item.options && item.options.length > 0 && (
-                        <div
-                          style={{
-                            paddingLeft: "32px",
-                            color: "#9ca3af",
-                            fontSize: "11px",
-                          }}
-                        >
-                          {item.options.map((opt) => (
-                            <div key={opt.id}>
-                              + {opt.optionName || "Option"}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {item.orderItemOptions &&
+                        item.orderItemOptions.length > 0 && (
+                          <div
+                            style={{
+                              paddingLeft: "32px",
+                              color: "#9ca3af",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {item.orderItemOptions.map((opt) => (
+                              <div key={opt.id}>
+                                + {opt.modifierOptionName || "Option"}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                     </div>
                   );
                 })
@@ -1444,8 +1295,8 @@ export function PaymentContent() {
 
         {/* Order Items */}
         <div style={{ marginBottom: "20px" }}>
-          {order?.orderItems.map((item) => {
-            const optionsTotal = (item.options || []).reduce(
+          {order?.orderItems?.map((item) => {
+            const optionsTotal = (item.orderItemOptions || []).reduce(
               (sum, opt) => sum + opt.priceAtTime,
               0,
             );
@@ -1486,7 +1337,7 @@ export function PaymentContent() {
                   </span>
                 </div>
 
-                {item.options && item.options.length > 0 && (
+                {item.orderItemOptions && item.orderItemOptions.length > 0 && (
                   <div
                     style={{
                       paddingLeft: "38px",
@@ -1494,8 +1345,10 @@ export function PaymentContent() {
                       fontSize: "12px",
                     }}
                   >
-                    {item.options.map((opt) => (
-                      <div key={opt.id}>+ {opt.optionName || "Option"}</div>
+                    {item.orderItemOptions.map((opt) => (
+                      <div key={opt.id}>
+                        + {opt.modifierOptionName || "Option"}
+                      </div>
                     ))}
                   </div>
                 )}

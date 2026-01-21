@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/cart-context";
-import { useCreateOrderMutation } from "@/hooks/use-order-query";
+import {
+  useCreateOrderMutation,
+  useCreateOrderAsCustomerMutation,
+} from "@/hooks/use-order-query";
+import { useAuth } from "@/context/auth-context";
 import { CartSummary } from "@/components/cart-summary";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,12 +19,14 @@ import { formatPrice } from "@/utils/format";
 export function CheckoutContent() {
   const router = useRouter();
   const { items, clearCart, totalPrice } = useCart();
+  const { isAuthenticated } = useAuth();
   const [guestName, setGuestName] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | null>(null);
 
   const createOrderMutation = useCreateOrderMutation();
+  const createOrderAsCustomerMutation = useCreateOrderAsCustomerMutation();
 
   // Load table number from localStorage
   useEffect(() => {
@@ -85,10 +91,16 @@ export function CheckoutContent() {
     };
 
     console.log("=== ORDER PAYLOAD ===");
+    console.log("Authenticated:", isAuthenticated);
     console.log(JSON.stringify(orderPayload, null, 2));
     console.log("====================");
 
-    createOrderMutation.mutate(orderPayload, {
+    // Use appropriate mutation based on authentication status
+    const mutation = isAuthenticated
+      ? createOrderAsCustomerMutation
+      : createOrderMutation;
+
+    mutation.mutate(orderPayload, {
       onSuccess: () => {
         clearCart();
         router.push("/order-info");
@@ -126,7 +138,10 @@ export function CheckoutContent() {
             placeholder="Enter your name so staff can identify you"
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
-            disabled={createOrderMutation.isPending}
+            disabled={
+              createOrderMutation.isPending ||
+              createOrderAsCustomerMutation.isPending
+            }
           />
         </div>
 
@@ -138,7 +153,10 @@ export function CheckoutContent() {
             placeholder="Any special requests for the entire order?"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            disabled={createOrderMutation.isPending}
+            disabled={
+              createOrderMutation.isPending ||
+              createOrderAsCustomerMutation.isPending
+            }
           />
         </div>
 
@@ -171,9 +189,13 @@ export function CheckoutContent() {
           className="add-to-cart-btn"
           style={{ width: "100%" }}
           onClick={handleSubmitOrder}
-          disabled={createOrderMutation.isPending}
+          disabled={
+            createOrderMutation.isPending ||
+            createOrderAsCustomerMutation.isPending
+          }
         >
-          {createOrderMutation.isPending
+          {createOrderMutation.isPending ||
+          createOrderAsCustomerMutation.isPending
             ? "Placing Order..."
             : `Place Order - ${formatPrice(totalPrice)}`}
         </button>
@@ -189,7 +211,10 @@ export function CheckoutContent() {
             cursor: "pointer",
           }}
           onClick={() => router.push("/menu")}
-          disabled={createOrderMutation.isPending}
+          disabled={
+            createOrderMutation.isPending ||
+            createOrderAsCustomerMutation.isPending
+          }
         >
           Continue Browsing
         </button>

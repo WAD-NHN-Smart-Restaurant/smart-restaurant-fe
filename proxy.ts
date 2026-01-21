@@ -13,11 +13,7 @@ const PUBLIC_ROUTES = [
   "/",
 ];
 
-const GUEST_ROUTES = [
-  "/menu",
-  "/checkout",
-  "/order-info",
-];
+const GUEST_ROUTES = ["/menu", "/checkout", "/order-info"];
 
 function isMatchRoute(routes: string[], pathname: string) {
   return routes.some(
@@ -34,32 +30,37 @@ export async function proxy(request: NextRequest) {
   // console.log("Guest Token in Middleware:", guestToken);
   //const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
 
-  if (isMatchRoute(PUBLIC_ROUTES, pathname) || isMatchRoute(GUEST_ROUTES, pathname)) {
+  if (
+    isMatchRoute(PUBLIC_ROUTES, pathname) ||
+    isMatchRoute(GUEST_ROUTES, pathname)
+  ) {
     return NextResponse.next();
   }
-  
+
   // Development mode: Auto-inject test token for guest routes
   // if (
-    //   process.env.NODE_ENV === "development" &&
-    //   PROTECTED_ROUTES.some((route) => pathname.startsWith(route)) &&
-    //   !guestToken &&
-    //   testToken
-    // ) {
-      //   const response = NextResponse.next();
-      //   response.cookies.set({
-        //     name: "guest_menu_token",
-        //     value: testToken,
-        //     httpOnly: false, // Allow JavaScript to read it
-        //     secure: false, // Allow in development
-        //     sameSite: "lax",
-        //     maxAge: 60 * 60 * 24, // 24 hours
-        //   });
-        //   return response;
-        // }
-        
+  //   process.env.NODE_ENV === "development" &&
+  //   PROTECTED_ROUTES.some((route) => pathname.startsWith(route)) &&
+  //   !guestToken &&
+  //   testToken
+  // ) {
+  //   const response = NextResponse.next();
+  //   response.cookies.set({
+  //     name: "guest_menu_token",
+  //     value: testToken,
+  //     httpOnly: false, // Allow JavaScript to read it
+  //     secure: false, // Allow in development
+  //     sameSite: "lax",
+  //     maxAge: 60 * 60 * 24, // 24 hours
+  //   });
+  //   return response;
+  // }
+
   // Production mode: Redirect to login if accessing protected route without token
   if (!isMatchRoute(PUBLIC_ROUTES, pathname)) {
-    const guestToken = request.cookies.get("guest_menu_token") || process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN; // TODO: Remove fallback env token for server-side in production
+    const guestToken =
+      request.cookies.get("guest_menu_token") ||
+      process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN; // TODO: Remove fallback env token for server-side in production
     if (!guestToken) {
       const loginUrl = new URL("/auth/login", request.url);
       return NextResponse.redirect(loginUrl);

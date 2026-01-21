@@ -1,10 +1,11 @@
 // Order Types - Based on backend DTOs
+// Backend returns all fields in camelCase via ResponseInterceptor
 
 export interface OrderItemOption {
   id: string;
   orderItemId: string;
   modifierOptionId: string;
-  optionName: string;
+  modifierOptionName: string; // Changed from optionName to match backend DTO
   priceAtTime: number;
   createdAt: string;
 }
@@ -21,7 +22,6 @@ export interface OrderItem {
   createdAt: string;
   updatedAt: string;
   orderItemOptions?: OrderItemOption[];
-  notes: string;
 }
 
 export interface Order {

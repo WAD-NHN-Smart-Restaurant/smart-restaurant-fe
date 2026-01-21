@@ -14,12 +14,7 @@ const publicRoutes = [
   "/",
 ];
 
-const GUEST_ROUTES = [
-  "/menu",
-  "/checkout",
-  "/order-info",
-];
-
+const GUEST_ROUTES = ["/menu", "/checkout", "/order-info"];
 
 function isPublicRoute(pathname: string) {
   return publicRoutes.some(

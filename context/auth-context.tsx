@@ -64,17 +64,13 @@ const AUTH_ROUTES = [
   "/callback",
 ];
 
-const GUEST_ROUTES = [
-  PATHS.MENU.INDEX,
-  "/checkout",
-  "/order-info",
-];
+const GUEST_ROUTES = [PATHS.MENU.INDEX, "/checkout", "/order-info"];
 
 const isGuestRoute = (pathname: string) => {
   return GUEST_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(route + "/"),
   );
-}
+};
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const router = useRouter();
@@ -84,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   console.log("AuthProvider mounting, pathname:", pathname);
-  
+
   // Check authentication status (skip for public routes and guest routes)
   const { data: isAuthenticated = false, isLoading: isAuthLoading } =
     useSafeQuery(AUTH_QUERY_KEYS.status, checkAuthStatus, {
@@ -107,8 +103,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       !isAuthLoading &&
       !isAuthenticated &&
       !hasHashFragment &&
-      !isAuthPage // Don't show modal on auth pages
-      && !isGuestRoute(pathname) // Don't show modal on guest routes
+      !isAuthPage && // Don't show modal on auth pages
+      !isGuestRoute(pathname) // Don't show modal on guest routes
     ) {
       console.log("User not authenticated, showing auth modal");
       setShowAuthModal(true);

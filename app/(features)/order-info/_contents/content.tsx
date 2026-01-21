@@ -11,6 +11,7 @@ import { MobileHeader } from "@/components/mobile-header";
 import { BottomNav } from "@/components/bottom-nav";
 import { formatPrice } from "@/utils/format";
 import { useAuth } from "@/context/auth-context";
+import type { Order, OrderItem } from "@/types/order-type";
 import {
   connectSocket,
   disconnectSocket,
@@ -45,36 +46,10 @@ const getErrorMessage = (err: unknown): string => {
   return "An unexpected error occurred";
 };
 
-interface OrderItem {
-  id: string;
-  menuItemId: string;
-  menuItemName?: string;
-  quantity: number;
-  unitPrice: number;
-  specialRequest?: string;
-  status: string;
-  options?: Array<{
-    id: string;
-    optionName?: string;
-    priceAtTime: number;
-  }>;
-}
-
-interface Order {
-  id: string;
-  tableId: string;
-  status: string;
-  guestName?: string;
-  notes?: string;
-  totalAmount: number;
-  createdAt: string;
-  orderItems: OrderItem[];
-}
-
 // Compute order totals locally to avoid stale/missing totals from backend
 const computeOrderTotals = (items: OrderItem[]) => {
   return items.reduce((sum, item) => {
-    const optionsTotal = (item.options || []).reduce(
+    const optionsTotal = (item.orderItemOptions || []).reduce(
       (optSum, opt) => optSum + opt.priceAtTime,
       0,
     );
@@ -168,13 +143,13 @@ export function OrderInfoContent() {
   // Derived totals for rendering
   const itemsCount = useMemo(() => {
     if (!order) return 0;
-    return order.orderItems.reduce((sum, item) => sum + item.quantity, 0);
+    return order.orderItems?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   }, [order]);
 
   const sessionTotal = useMemo(() => {
     if (!order) return 0;
     // Recompute to stay accurate with live item updates
-    return order.totalAmount || computeOrderTotals(order.orderItems);
+    return order.totalAmount || computeOrderTotals(order.orderItems || []);
   }, [order]);
 
   const renderOrderCard = (
@@ -194,7 +169,7 @@ export function OrderInfoContent() {
     const orderTotal =
       data.totalAmount != null
         ? data.totalAmount
-        : computeOrderTotals(data.orderItems);
+        : computeOrderTotals(data.orderItems || []);
 
     const getItemBadge = (status: string) => {
       const meta = ITEM_STATUS_BADGE[status] ?? {
@@ -336,7 +311,7 @@ export function OrderInfoContent() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {data.orderItems.map((item) => {
+          {data.orderItems?.map((item) => {
             const badge = getItemBadge(item.status);
             return (
               <div
@@ -373,17 +348,19 @@ export function OrderInfoContent() {
                   <div style={{ color: "#7f8c9d", fontSize: 12 }}>
                     {formatPrice(item.unitPrice)}
                   </div>
-                  {item.options && item.options.length > 0 && (
-                    <div
-                      style={{ marginTop: 6, fontSize: 12, color: "#6c7a89" }}
-                    >
-                      {item.options.map((opt) => (
-                        <div key={opt.id}>
-                          + {opt.optionName} ({formatPrice(opt.priceAtTime)})
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {item.orderItemOptions &&
+                    item.orderItemOptions.length > 0 && (
+                      <div
+                        style={{ marginTop: 6, fontSize: 12, color: "#6c7a89" }}
+                      >
+                        {item.orderItemOptions.map((opt) => (
+                          <div key={opt.id}>
+                            + {opt.modifierOptionName} (
+                            {formatPrice(opt.priceAtTime)})
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   {item.specialRequest && (
                     <div
                       style={{
@@ -508,7 +485,7 @@ export function OrderInfoContent() {
           if (!prev) return prev;
           return {
             ...prev,
-            orderItems: prev.orderItems.map((item) =>
+            orderItems: prev.orderItems?.map((item) =>
               item.id === data.order_item_id
                 ? { ...item, status: data.status }
                 : item,
@@ -537,153 +514,25 @@ export function OrderInfoContent() {
         setIsLoading(true);
         setError(null);
         const response = await getCurrentOrder();
-        // Response has structure: {success, data: {status, data: RawOrder}}
-        if (response?.success) {
-          const raw = response.data as any; // Backend may return camelCase or snake_case
 
-          // Handle both camelCase (new) and snake_case (old) responses
-          const orderItems = raw.orderItems || raw.order_items || [];
+        // Response structure: { success: boolean, data: Order, message?: string }
+        if (response?.success && response.data) {
+          const order = response.data;
 
-          const mappedItems = orderItems.map((it: any) => ({
-            id: it.id,
-            menuItemId: it.menuItemId || it.menu_item_id,
-            menuItemName: it.menuItemName || it.menu_item_name || undefined,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice || it.unit_price,
-            specialRequest:
-              it.notes || it.specialRequest || it.special_request || undefined,
-            status: it.status,
-            options: (it.orderItemOptions || it.order_item_options || []).map(
-              (op: any) => ({
-                id: op.id,
-                optionName: op.optionName || op.option_name || undefined,
-                priceAtTime: op.priceAtTime || op.price_at_time,
-              }),
-            ),
-          }));
-
-          const mapped: Order = {
-            id: raw.id,
-            tableId: raw.tableId || raw.table_id,
-            status: raw.status,
-            guestName: raw.guestName || raw.guest_name || undefined,
-            notes:
-              raw.notes ||
-              raw.specialRequest ||
-              raw.special_request ||
-              undefined,
-            createdAt: raw.createdAt || raw.created_at,
-            orderItems: mappedItems,
-            // Prefer backend total_amount/totalAmount when provided, otherwise compute locally
-            totalAmount:
-              raw.totalAmount ??
-              raw.total_amount ??
-              computeOrderTotals(mappedItems),
+          // Backend returns camelCase via ResponseInterceptor
+          // Map to local Order type (should already match)
+          const mappedOrder: Order = {
+            ...order,
+            orderItems: (order.orderItems || []).map((item) => ({
+              ...item,
+              orderItemOptions: item.orderItemOptions || [],
+            })),
           };
-          setOrder(mapped);
+
+          setOrder(mappedOrder);
         } else {
           setError("Unable to load order information");
-          return;
         }
-
-        const raw = response.data as unknown;
-        const data = raw as {
-          id?: string;
-          tableId?: string;
-          table_id?: string;
-          status?: string;
-          guestName?: string | null;
-          guest_name?: string | null;
-          notes?: string | null;
-          specialRequest?: string | null;
-          special_request?: string | null;
-          totalAmount?: number | null;
-          total_amount?: number | null;
-          createdAt?: string;
-          created_at?: string;
-          orderItems?: unknown[];
-          order_items?: unknown[];
-        };
-
-        const orderItems = (data?.orderItems || data?.order_items) as unknown[];
-        const mappedItems = (orderItems || [])
-          .map((it: unknown) => {
-            const item = it as {
-              id?: string;
-              menuItemId?: string;
-              menu_item_id?: string;
-              menuItemName?: string | null;
-              menu_item_name?: string | null;
-              quantity?: number;
-              unitPrice?: number;
-              unit_price?: number;
-              notes?: string | null;
-              specialRequest?: string | null;
-              special_request?: string | null;
-              status?: string;
-              orderItemOptions?: unknown[];
-              order_item_options?: unknown[];
-            };
-
-            const opts = (item?.orderItemOptions ||
-              item?.order_item_options) as unknown[];
-
-            return {
-              id: (item?.id || "") as string,
-              menuItemId: (item?.menuItemId ||
-                item?.menu_item_id ||
-                "") as string,
-              menuItemName: (item?.menuItemName || item?.menu_item_name) as
-                | string
-                | undefined,
-              quantity: (item?.quantity || 0) as number,
-              unitPrice: (item?.unitPrice || item?.unit_price || 0) as number,
-              specialRequest: (item?.notes ||
-                item?.specialRequest ||
-                item?.special_request) as string | undefined,
-              status: (item?.status || "pending") as string,
-              options: (opts || [])
-                .map((op: unknown) => {
-                  const option = op as {
-                    id?: string;
-                    optionName?: string | null;
-                    option_name?: string | null;
-                    priceAtTime?: number;
-                    price_at_time?: number;
-                  };
-                  return {
-                    id: (option?.id || "") as string,
-                    optionName: (option?.optionName || option?.option_name) as
-                      | string
-                      | undefined,
-                    priceAtTime: (option?.priceAtTime ||
-                      option?.price_at_time ||
-                      0) as number,
-                  };
-                })
-                .filter(Boolean),
-            };
-          })
-          .filter(Boolean);
-
-        const mapped: Order = {
-          id: (data?.id || "") as string,
-          tableId: (data?.tableId || data?.table_id || "") as string,
-          status: (data?.status || "pending") as Order["status"],
-          guestName: (data?.guestName || data?.guest_name) as
-            | string
-            | undefined,
-          notes: (data?.notes ||
-            data?.specialRequest ||
-            data?.special_request) as string | undefined,
-          createdAt: (data?.createdAt || data?.created_at || "") as string,
-          orderItems: mappedItems,
-          totalAmount:
-            ((data?.totalAmount || data?.total_amount) as number) ||
-            computeOrderTotals(mappedItems),
-        };
-
-        setOrder(mapped);
       } catch (err: unknown) {
         const message =
           getErrorMessage(err) || "Error loading order information";
@@ -719,7 +568,7 @@ export function OrderInfoContent() {
         // and automatic updates when waiter accepts the payment
         router.push("/payment");
       } else {
-        setError(response.data?.message || "Unable to request bill");
+        setError("Unable to request bill");
       }
     } catch (err: unknown) {
       const message = getErrorMessage(err) || "Error requesting bill";
