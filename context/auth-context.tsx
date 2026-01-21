@@ -64,7 +64,7 @@ const AUTH_ROUTES = [
   "/callback",
 ];
 
-const GUEST_ROUTES = [PATHS.MENU.INDEX, "/checkout", "/order-info"];
+const GUEST_ROUTES = [PATHS.MENU.INDEX, "/checkout", "/order-info", "/payment"];
 
 const isGuestRoute = (pathname: string) => {
   return GUEST_ROUTES.some(
@@ -78,8 +78,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const pathname = usePathname();
   const supabase = createClient(); // Create client inside component
   const [showAuthModal, setShowAuthModal] = useState(false);
-
-  console.log("AuthProvider mounting, pathname:", pathname);
 
   // Check authentication status (skip for public routes and guest routes)
   const { data: isAuthenticated = false, isLoading: isAuthLoading } =

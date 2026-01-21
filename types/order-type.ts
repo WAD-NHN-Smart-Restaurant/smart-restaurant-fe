@@ -5,7 +5,7 @@ export interface OrderItemOption {
   id: string;
   orderItemId: string;
   modifierOptionId: string;
-  modifierOptionName: string; // Changed from optionName to match backend DTO
+  optionName: string;
   priceAtTime: number;
   createdAt: string;
 }
@@ -16,6 +16,7 @@ export interface OrderItem {
   menuItemId: string;
   menuItemName: string;
   quantity: number;
+  notes: string;
   unitPrice: number;
   specialRequest?: string;
   status: string;

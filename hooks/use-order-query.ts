@@ -12,7 +12,7 @@ import type { Order, CreateOrderRequest } from "@/types/order-type";
 import type { ApiResponse } from "@/types/api-type";
 
 // Query keys for order-related queries
-const ORDER_QUERY_KEYS = {
+export const ORDER_QUERY_KEYS = {
   all: ["orders"] as const,
   active: () => [...ORDER_QUERY_KEYS.all, "active"] as const,
   detail: (id: string) => [...ORDER_QUERY_KEYS.all, "detail", id] as const,
@@ -26,7 +26,7 @@ export const useActiveOrderQuery = () => {
   const hasTableId =
     typeof window !== "undefined" && !!localStorage.getItem("guest_table_id");
 
-  return useSafeQuery<ApiResponse<Order>>(
+  return useSafeQuery<Order>(
     ORDER_QUERY_KEYS.active(),
     () => getCurrentOrder(),
     {

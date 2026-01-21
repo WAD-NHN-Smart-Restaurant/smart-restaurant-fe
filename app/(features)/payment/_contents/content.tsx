@@ -196,10 +196,9 @@ export function PaymentContent() {
       );
       const result = await getCurrentOrder();
       console.log("[Order Fetch] Raw response:", result);
-
       // Backend returns: { success: boolean, data: Order, message?: string }
-      if (result?.success && result.data) {
-        const order = result.data;
+      if (result) {
+        const order = result;
         console.log("[Order Fetch] Order data:", {
           id: order.id,
           status: order.status,
@@ -226,8 +225,8 @@ export function PaymentContent() {
         return order;
       } else {
         console.warn("[Order Fetch] Response structure invalid:", {
-          hasSuccess: !!result?.success,
-          hasData: !!result?.data,
+          hasSuccess: !!result,
+          hasData: !!result,
           resultKeys: result ? Object.keys(result) : "N/A",
         });
 
@@ -1067,7 +1066,7 @@ export function PaymentContent() {
                           >
                             {item.orderItemOptions.map((opt) => (
                               <div key={opt.id}>
-                                + {opt.modifierOptionName || "Option"}
+                                + {opt.optionName || "Option"}
                               </div>
                             ))}
                           </div>
@@ -1346,9 +1345,7 @@ export function PaymentContent() {
                     }}
                   >
                     {item.orderItemOptions.map((opt) => (
-                      <div key={opt.id}>
-                        + {opt.modifierOptionName || "Option"}
-                      </div>
+                      <div key={opt.id}>+ {opt.optionName || "Option"}</div>
                     ))}
                   </div>
                 )}

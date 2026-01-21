@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+const GUEST_TOKEN_COOKIE = "guest_menu_token";
+
 const PUBLIC_ROUTES = [
   "/login",
   "/login-google/callback",
@@ -24,9 +26,9 @@ function isMatchRoute(routes: string[], pathname: string) {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // TODO: Remove fallback env token for server-side in production
-  const guestToken =
-    request.cookies.get("guest_menu_token") ||
-    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+  // const guestToken =
+  //   request.cookies.get(GUEST_TOKEN_COOKIE) ||
+  //   process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
   // console.log("Guest Token in Middleware:", guestToken);
   //const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
 
@@ -58,11 +60,13 @@ export async function proxy(request: NextRequest) {
 
   // Production mode: Redirect to login if accessing protected route without token
   if (!isMatchRoute(PUBLIC_ROUTES, pathname)) {
-    const guestToken =
-      request.cookies.get("guest_menu_token") ||
-      process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN; // TODO: Remove fallback env token for server-side in production
+    const allCookie = request.cookies.getAll();
+    const guestTokenCookie = allCookie.find(
+      (cookie) => cookie.name === GUEST_TOKEN_COOKIE,
+    );
+    const guestToken = guestTokenCookie?.value;
     if (!guestToken) {
-      const loginUrl = new URL("/auth/login", request.url);
+      const loginUrl = new URL("/login", request.url);
       return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next();

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { CreditCard, Check } from "lucide-react";
 import { confirmPayment } from "@/api/payment-api";
 import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
@@ -82,7 +83,15 @@ export default function Content() {
         }}
       >
         <div style={{ textAlign: "center", marginBottom: "16px" }}>
-          <div style={{ fontSize: "36px", marginBottom: "4px" }}>💳</div>
+          <div
+            style={{
+              marginBottom: "8px",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <CreditCard size={48} color="#1f3b57" />
+          </div>
           <div style={{ fontWeight: 800, fontSize: "18px", color: "#1f3b57" }}>
             {methodLabel} Payment
           </div>
@@ -194,9 +203,19 @@ export default function Content() {
               fontSize: "16px",
               cursor: isConfirming ? "not-allowed" : "pointer",
               opacity: isConfirming ? 0.8 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
             }}
           >
-            {isConfirming ? "Confirming..." : "✓ I have paid"}
+            {isConfirming ? (
+              "Confirming..."
+            ) : (
+              <>
+                <Check size={20} /> I have paid
+              </>
+            )}
           </button>
 
           <button

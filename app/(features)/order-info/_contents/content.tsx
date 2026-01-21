@@ -2,10 +2,19 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentOrder, requestBill, callWaiter } from "@/api/order-api";
+import { requestBill, callWaiter } from "@/api/order-api";
 import { Button } from "@/components/ui/button";
-// import { Alert, AlertDescription } from "@/components/ui/alert";
-// import { AlertTriangle } from "lucide-react";
+import {
+  PartyPopper,
+  ClipboardList,
+  Utensils,
+  Clock,
+  ChefHat,
+  Flame,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+} from "lucide-react";
 import { MobileLayout } from "@/components/mobile-layout";
 import { MobileHeader } from "@/components/mobile-header";
 import { BottomNav } from "@/components/bottom-nav";
@@ -19,6 +28,8 @@ import {
   onOrderStatusUpdated,
   onOrderItemUpdated,
 } from "@/libs/socket";
+import { useQueryClient } from "@tanstack/react-query";
+import { ORDER_QUERY_KEYS, useActiveOrderQuery } from "@/hooks/use-order-query";
 
 // Helper function to extract error message from various error types
 const getErrorMessage = (err: unknown): string => {
@@ -72,26 +83,14 @@ const ORDER_STATUS_BADGE: Record<
   rejected: { label: "Rejected", bg: "#ffe5e5", color: "#c0392b" },
 };
 
-const ORDER_STATUS_STEP_INDEX: Record<string, number> = {
-  pending: 0,
-  accepted: 0,
-  preparing: 1,
-  ready: 2,
-  served: 2,
-  payment_pending: 2,
-  completed: 2,
-  cancelled: 0,
-  rejected: 0,
-};
-
 const ITEM_STATUS_BADGE: Record<
   string,
   { label: string; bg: string; color: string }
 > = {
   pending: { label: "Queued", bg: "#e8f4fd", color: "#2980b9" },
-  accepted: { label: "Queued", bg: "#e8f4fd", color: "#2980b9" },
+  accepted: { label: "Accepted", bg: "#e8f4fd", color: "#2482b9" },
   preparing: { label: "Cooking", bg: "#fff4e6", color: "#e67e22" },
-  ready: { label: "Ready", bg: "#d5f4e6", color: "#27ae60" },
+  ready: { label: "Ready", bg: "#d5f4e6", color: "#16ae60" },
   served: { label: "Served", bg: "#d5f4e6", color: "#27ae60" },
   rejected: { label: "Rejected", bg: "#ffebee", color: "#c0392b" },
 };
@@ -116,13 +115,10 @@ const formatRelativeTime = (timestamp: string) => {
   return `${days} days ago`;
 };
 
-const getOrderStepIndex = (status: string) =>
-  ORDER_STATUS_STEP_INDEX[status] ?? 0;
-
 export function OrderInfoContent() {
   const router = useRouter();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: order, isLoading } = useActiveOrderQuery();
   const [error, setError] = useState<string | null>(null);
   const [isCallingWaiter, setIsCallingWaiter] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
@@ -158,12 +154,48 @@ export function OrderInfoContent() {
     totalCount: number,
     variant: "current" | "past" = "current",
   ) => {
-    const pill = ORDER_STATUS_BADGE[data.status] ?? {
+    // Calculate step index based on order items status (excluding rejected items)
+    const nonRejectedItems =
+      data.orderItems?.filter((item) => item.status !== "rejected") || [];
+    let stepIndex = 0;
+    let itemsStatus = "pending";
+    if (nonRejectedItems.length > 0) {
+      const allAccepted = nonRejectedItems.every((item) =>
+        ["accepted", "preparing", "ready", "served"].includes(item.status),
+      );
+      const allReady = nonRejectedItems.every((item) =>
+        ["ready", "served"].includes(item.status),
+      );
+      const allServed = nonRejectedItems.every(
+        (item) => item.status === "served",
+      );
+      if (allServed) {
+        stepIndex = 3; // All steps completed
+        itemsStatus = "served";
+      } else if (allReady) {
+        stepIndex = 2; // Ready is active
+        itemsStatus = "ready";
+      } else if (allAccepted) {
+        stepIndex = 1; // Preparing is active
+        itemsStatus = "preparing";
+      }
+      // else calculatedStepIndex = 0 (Received is active), itemsStatus = 'pending'
+    }
+    // Determine pill based on order status or items status
+    let displayStatus = itemsStatus;
+    if (
+      ["payment_pending", "completed", "cancelled", "rejected"].includes(
+        data.status,
+      )
+    ) {
+      displayStatus = data.status;
+    }
+
+    const pill = ORDER_STATUS_BADGE[displayStatus] ?? {
       label: data.status,
       bg: "#f5f7fb",
       color: "#5c6b7a",
     };
-    const stepIndex = getOrderStepIndex(data.status);
     const steps = ["Received", "Preparing", "Ready"];
     // const stepColors = ["#23a05d", "#e74c3c", "#23a05d"];
     const orderTotal =
@@ -177,15 +209,17 @@ export function OrderInfoContent() {
         bg: "#eef2f7",
         color: "#667085",
       };
-      const icon =
+      const IconComponent =
         status === "preparing"
-          ? "🔥"
+          ? Flame
           : status === "ready" || status === "served"
-            ? "✅"
+            ? CheckCircle2
             : status === "rejected"
-              ? "⛔"
-              : "⏳";
-      return { ...meta, icon };
+              ? XCircle
+              : status === "accepted"
+                ? ChefHat
+                : Clock;
+      return { ...meta, IconComponent };
     };
 
     return (
@@ -315,83 +349,97 @@ export function OrderInfoContent() {
             const badge = getItemBadge(item.status);
             return (
               <div
-                key={item.id}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "12px 0",
                   borderBottom: "1px solid #eef1f5",
                 }}
+                key={item.id}
               >
                 <div
                   style={{
-                    fontWeight: 800,
-                    color: "#d64034",
-                    minWidth: 32,
-                    textAlign: "right",
-                  }}
-                >
-                  {item.quantity}x
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      color: "#1f3b57",
-                      marginBottom: 4,
-                      fontSize: 15,
-                    }}
-                  >
-                    {item.menuItemName || "Item"}
-                  </div>
-                  <div style={{ color: "#7f8c9d", fontSize: 12 }}>
-                    {formatPrice(item.unitPrice)}
-                  </div>
-                  {item.orderItemOptions &&
-                    item.orderItemOptions.length > 0 && (
-                      <div
-                        style={{ marginTop: 6, fontSize: 12, color: "#6c7a89" }}
-                      >
-                        {item.orderItemOptions.map((opt) => (
-                          <div key={opt.id}>
-                            + {opt.modifierOptionName} (
-                            {formatPrice(opt.priceAtTime)})
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  {item.specialRequest && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 12,
-                        color: "#c0392b",
-                        fontStyle: "italic",
-                      }}
-                    >
-                      Note: {item.specialRequest}
-                    </div>
-                  )}
-                </div>
-                <div
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: "14px",
-                    background: badge.bg,
-                    color: badge.color,
-                    fontWeight: 700,
-                    fontSize: 12,
                     display: "flex",
                     alignItems: "center",
-                    gap: 6,
-                    minWidth: 92,
-                    justifyContent: "center",
+                    gap: 10,
+                    padding: "12px 0",
                   }}
                 >
-                  <span>{badge.icon}</span>
-                  <span>{badge.label}</span>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: "#d64034",
+                      minWidth: 32,
+                      textAlign: "right",
+                    }}
+                  >
+                    {item.quantity}x
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        color: "#1f3b57",
+                        marginBottom: 4,
+                        fontSize: 15,
+                      }}
+                    >
+                      {item.menuItemName || "Item"}
+                    </div>
+                    <div style={{ color: "#7f8c9d", fontSize: 12 }}>
+                      {formatPrice(item.unitPrice)}
+                    </div>
+                    {item.orderItemOptions &&
+                      item.orderItemOptions.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 12,
+                            color: "#6c7a89",
+                          }}
+                        >
+                          {item.orderItemOptions.map((opt) => (
+                            <div key={opt.id}>
+                              + {opt.optionName} ({formatPrice(opt.priceAtTime)}
+                              )
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    {item.specialRequest && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 12,
+                          color: "#c0392b",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        Note: {item.specialRequest}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "14px",
+                      background: badge.bg,
+                      color: badge.color,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      minWidth: 92,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <badge.IconComponent size={14} />
+                    <span>{badge.label}</span>
+                  </div>
                 </div>
+                {item.status === "rejected" && item.notes && (
+                  <div className=" text-red-500 px-10 mb-1 italic text-sm">
+                    Reject reason: {item.notes}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -411,7 +459,7 @@ export function OrderInfoContent() {
               gap: 8,
             }}
           >
-            🎉 Your order is ready! Please pick up at the counter.
+            <PartyPopper /> <span>Your order is ready!.</span>
           </div>
         )}
 
@@ -446,19 +494,19 @@ export function OrderInfoContent() {
   const pastOrders: Order[] = [];
   // Check if all items are ready or served (for bill request)
   const canRequestBill = useMemo(() => {
-    if (!order?.orderItems || order.orderItems.length === 0) return false;
-    return (
-      order.orderItems.every((item) => item.status === "served") ||
-      order.status === "served"
+    const filterItems = order?.orderItems?.filter(
+      (item) => item.status !== "rejected",
     );
+    if (!filterItems || filterItems.length === 0) return false;
+    return filterItems.every((item) => item.status === "served");
   }, [order]);
+
   // Initialize WebSocket connection
   useEffect(() => {
-    const storedTableId = localStorage.getItem("tableId");
+    const storedTableId = localStorage.getItem("guest_table_id");
     if (storedTableId) {
       // Connect to Socket.io
       const socket = connectSocket();
-
       socket.on("connect", () => {
         console.log("Socket connected");
         joinTable(storedTableId);
@@ -471,27 +519,13 @@ export function OrderInfoContent() {
       // Listen for real-time updates
       const unsubscribeOrderStatus = onOrderStatusUpdated((data) => {
         console.log("Order status updated:", data);
-        setOrder((prev) => {
-          if (prev && prev.id === data.order_id) {
-            return { ...prev, status: data.status };
-          }
-          return prev;
-        });
+        // Invalidate and refetch the active order query
+        queryClient.invalidateQueries({ queryKey: ["orders", "active"] });
       });
 
       const unsubscribeOrderItem = onOrderItemUpdated((data) => {
         console.log("Order item updated:", data);
-        setOrder((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            orderItems: prev.orderItems?.map((item) =>
-              item.id === data.order_item_id
-                ? { ...item, status: data.status }
-                : item,
-            ),
-          };
-        });
+        queryClient.invalidateQueries({ queryKey: ["orders", "active"] });
 
         // Show notification for rejected items
         if (data.status === "rejected" && data.rejected_reason) {
@@ -506,45 +540,7 @@ export function OrderInfoContent() {
         disconnectSocket();
       };
     }
-  }, []);
-
-  useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const response = await getCurrentOrder();
-
-        // Response structure: { success: boolean, data: Order, message?: string }
-        if (response?.success && response.data) {
-          const order = response.data;
-
-          // Backend returns camelCase via ResponseInterceptor
-          // Map to local Order type (should already match)
-          const mappedOrder: Order = {
-            ...order,
-            orderItems: (order.orderItems || []).map((item) => ({
-              ...item,
-              orderItemOptions: item.orderItemOptions || [],
-            })),
-          };
-
-          setOrder(mappedOrder);
-        } else {
-          setError("Unable to load order information");
-        }
-      } catch (err: unknown) {
-        const message =
-          getErrorMessage(err) || "Error loading order information";
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchOrder();
-    return () => undefined;
-  }, []);
+  }, [queryClient]);
 
   const handleRequestBill = async () => {
     if (!order) {
@@ -563,7 +559,11 @@ export function OrderInfoContent() {
           sessionStorage.setItem("pending_payment_order_id", order.id);
         }
         // Update order status
-        setOrder({ ...order, status: "payment_pending" });
+        queryClient.setQueryData<Order>(ORDER_QUERY_KEYS.active(), {
+          ...order,
+          status: "payment_pending",
+        });
+        // setOrder({ ...order, status: "payment_pending" });
         // Auto-navigate to payment page where customer will see the waiting screen
         // and automatic updates when waiter accepts the payment
         router.push("/payment");
@@ -631,15 +631,20 @@ export function OrderInfoContent() {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <p
+            <div
               style={{
                 fontSize: "18px",
                 color: "#c62828",
                 marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                justifyContent: "center",
               }}
             >
-              ⚠️ {error}
-            </p>
+              <AlertTriangle size={20} />
+              <span>{error}</span>
+            </div>
             <p
               style={{
                 fontSize: "14px",
@@ -739,10 +744,11 @@ export function OrderInfoContent() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  📋 <span>{currentOrders.length}</span> orders
+                  <ClipboardList size={16} />{" "}
+                  <span>{currentOrders.length}</span> orders
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  🍽️ <span>{itemsCount}</span> items
+                  <Utensils size={16} /> <span>{itemsCount}</span> items
                 </div>
               </div>
             </div>
@@ -818,7 +824,7 @@ export function OrderInfoContent() {
                   : order?.status === "completed"
                     ? "Paid"
                     : !canRequestBill
-                      ? "Request Bill"
+                      ? "Items Not Served"
                       : "Request Bill"}
               </button>
               <button
@@ -938,7 +944,7 @@ export function OrderInfoContent() {
                       gap: "8px",
                     }}
                   >
-                    <span style={{ fontSize: "18px" }}>🍽️</span>
+                    <Utensils size={18} />
                     <span>Browse Menu</span>
                   </button>
                 </div>

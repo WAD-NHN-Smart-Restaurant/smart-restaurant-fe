@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
 import Cookies from "js-cookie";
+import { GUEST_TOKEN_COOKIE } from "@/app/(features)/menu/_contents/content";
 
 interface TableInfo {
   tableId: string;
@@ -14,30 +14,26 @@ interface TableInfo {
  * Hook to decode JWT token and extract table information
  */
 export function useTableInfo(): TableInfo | null {
-  return useMemo(() => {
-    try {
-      // Get token from cookie or env
-      const token =
-        Cookies.get("guest_menu_token") ||
-        process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+  try {
+    // Get token from cookie or env
+    const token = Cookies.get(GUEST_TOKEN_COOKIE);
 
-      if (!token) return null;
+    if (!token) return null;
 
-      // Decode JWT (it's base64 encoded)
-      const payload = token.split(".")[1];
-      if (!payload) return null;
+    // Decode JWT (it's base64 encoded)
+    const payload = token.split(".")[1];
+    if (!payload) return null;
 
-      const decoded = JSON.parse(atob(payload));
+    const decoded = JSON.parse(atob(payload));
 
-      return {
-        tableId: decoded.tableId,
-        restaurantId: decoded.restaurantId,
-        tableName: decoded.tableName,
-        tableNumber: decoded.tableNumber,
-      };
-    } catch (error) {
-      console.error("Failed to decode table token:", error);
-      return null;
-    }
-  }, []);
+    return {
+      tableId: decoded.tableId,
+      restaurantId: decoded.restaurantId,
+      tableName: decoded.tableName,
+      tableNumber: decoded.tableNumber,
+    };
+  } catch (error) {
+    console.error("Failed to decode table token:", error);
+    return null;
+  }
 }

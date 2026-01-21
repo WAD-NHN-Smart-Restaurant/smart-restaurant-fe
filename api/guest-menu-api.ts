@@ -9,6 +9,8 @@ import type {
 const GUEST_MENU_API = {
   GET_MENU: "menu",
   GET_CATEGORIES: "menu/categories",
+  GET_RECOMMENDATIONS: (menuItemId: string) =>
+    `orders/menu-items/${menuItemId}/recommendations`,
 };
 
 /**
@@ -43,6 +45,25 @@ export const getGuestMenuCategories = async (
     return response.data?.data ?? response.data ?? [];
   } catch (error) {
     console.error("Failed to fetch guest menu categories:", error);
+    return [];
+  }
+};
+
+/**
+ * Get recommended menu items (same category as the provided item)
+ */
+export const getRecommendedMenuItems = async (
+  menuItemId: string,
+  limit: number = 6,
+): Promise<GuestMenuItem[]> => {
+  try {
+    const response = await apiRequest.get<ApiResponse<GuestMenuItem[]>>(
+      GUEST_MENU_API.GET_RECOMMENDATIONS(menuItemId),
+      { params: { limit } },
+    );
+    return response.data?.data ?? [];
+  } catch (error) {
+    console.error("Failed to fetch recommended menu items:", error);
     return [];
   }
 };

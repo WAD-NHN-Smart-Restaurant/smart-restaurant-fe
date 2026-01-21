@@ -24,6 +24,7 @@ import type {
   GuestMenuItemPhoto,
 } from "@/types/guest-menu-type";
 import { useGuestMenuQuery } from "../../_contents/use-guest-menu-query";
+import { useRecommendationsQuery } from "../../_contents/use-recommendations-query";
 import { MobileLayout } from "@/components/mobile-layout";
 import { LoadingState } from "../../_components/loading-state";
 
@@ -42,12 +43,16 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
   );
   const [specialRequest, setSpecialRequest] = useState("");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [imageError, setImageError] = useState(false);
 
   // Fetch all menu items and find the specific item
   const { data, isLoading, isError } = useGuestMenuQuery({
     limit: 100,
     table: tableId,
   });
+
+  // Fetch recommended items
+  const { data: recommendations = [] } = useRecommendationsQuery(itemId, 6);
 
   const item = useMemo(() => {
     if (!data?.data?.items) return null;
@@ -106,6 +111,12 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
 
   const handleQuantityChange = (delta: number) => {
     setQuantity((prev) => Math.max(1, prev + delta));
+  };
+
+  // Reset image error when photo index changes
+  const handlePhotoChange = (index: number) => {
+    setCurrentPhotoIndex(index);
+    setImageError(false);
   };
 
   const handleAddToCart = () => {
@@ -202,7 +213,6 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
         ];
 
   const currentPhoto = photos[currentPhotoIndex];
-
   return (
     <MobileLayout>
       {/* Header with back button */}
@@ -222,8 +232,9 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
         {/* Photo Gallery */}
         <div className="space-y-4">
           <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
-            {currentPhoto.url ? (
+            {currentPhoto.url && !imageError ? (
               <Image
+                key={currentPhotoIndex}
                 src={currentPhoto.url}
                 alt={item.name}
                 fill
@@ -231,15 +242,7 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                 sizes="100vw"
                 priority
                 unoptimized
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = "none";
-                  const parent = target.parentElement;
-                  if (parent) {
-                    parent.innerHTML =
-                      '<div class="absolute inset-0 flex items-center justify-center text-6xl">🍽️</div>';
-                  }
-                }}
+                onError={() => setImageError(true)}
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center text-6xl">
@@ -266,7 +269,7 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                 ) => (
                   <button
                     key={index}
-                    onClick={() => setCurrentPhotoIndex(index)}
+                    onClick={() => handlePhotoChange(index)}
                     className={`relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0 border-2 ${
                       index === currentPhotoIndex
                         ? "border-red-500"
@@ -281,15 +284,6 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                         className="object-cover"
                         sizes="64px"
                         unoptimized
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = "none";
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML =
-                              '<div class="absolute inset-0 flex items-center justify-center bg-gray-100">🍽️</div>';
-                          }
-                        }}
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
@@ -468,6 +462,69 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
             </Button>
           </CardContent>
         </Card>
+        {/* Recommended Items */}
+        {recommendations.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg">You May Also Like</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {recommendations.map((recItem: GuestMenuItem) => {
+                const recPhoto =
+                  recItem.menuItemPhotos?.find(
+                    (p: GuestMenuItemPhoto) => p.isPrimary,
+                  ) || recItem.menuItemPhotos?.[0];
+                return (
+                  <Card
+                    key={recItem.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (tableId) params.set("table", tableId);
+                      router.push(`/menu/${recItem.id}?${params.toString()}`);
+                    }}
+                  >
+                    <CardContent className="p-0">
+                      <div className="relative aspect-square bg-gray-100">
+                        {recPhoto?.url ? (
+                          <Image
+                            src={recPhoto.url}
+                            alt={recItem.name}
+                            fill
+                            className="object-cover rounded-t-lg"
+                            sizes="(max-width: 768px) 50vw, 25vw"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-4xl">
+                            🍽️
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3 space-y-1">
+                        <h4 className="font-medium text-sm line-clamp-1">
+                          {recItem.name}
+                        </h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-green-600 font-semibold text-sm">
+                            {formatPrice(recItem.price)}
+                          </span>
+                          {recItem.isChefRecommended && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs px-1.5 py-0"
+                            >
+                              <Star className="h-3 w-3 mr-0.5" />
+                              Chef
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </MobileLayout>
   );

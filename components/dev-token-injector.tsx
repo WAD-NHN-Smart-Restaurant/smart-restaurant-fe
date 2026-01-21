@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Cookies from "js-cookie";
+import { GUEST_TOKEN_COOKIE } from "@/app/(features)/menu/_contents/content";
 
 /**
  * Development Cookie Injector
@@ -14,19 +15,11 @@ export function DevTokenInjector() {
       return;
     }
 
-    const testToken = process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
-    const guestToken = Cookies.get("guest_menu_token");
+    const guestToken = Cookies.get(GUEST_TOKEN_COOKIE);
 
     // Auto-inject test token if not already set
-    if (testToken && !guestToken) {
-      Cookies.set("guest_menu_token", testToken, {
-        expires: 1, // 1 day
-        sameSite: "Lax",
-      });
-
-      console.log(
-        "[Dev Mode] Auto-injected test token: guest_menu_token set in cookie",
-      );
+    if (!guestToken) {
+      return;
     }
   }, []);
 

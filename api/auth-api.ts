@@ -149,12 +149,10 @@ export const getCurrentUser = async (): Promise<User> => {
 
     // Handle Error instances
     if (error instanceof Error) {
-      console.error("Get current user error:", error.message);
       throw error;
     }
 
     // Handle unknown errors
-    console.error("Get current user error:", error);
     throw new Error("Failed to fetch user data");
   }
 };

@@ -35,6 +35,7 @@ export const joinTable = (tableId: string) => {
   const socket = getSocket();
   if (socket.connected) {
     // Guests only join table-specific rooms, not restaurant rooms
+    console.log(`Joining table room: ${tableId}`);
     socket.emit("join-table", { table_id: tableId });
   }
 };
