@@ -1,3 +1,4 @@
+import { MenuItemReview } from "@/app/(features)/menu/[id]/_contents/content";
 import apiRequest from "@/libs/api-request";
 import type { ApiResponse, ApiPaginatedResponse } from "@/types/api-type";
 import type { Order } from "@/types/order-type";
@@ -242,8 +243,8 @@ export async function getMenuItemReviews(
   menuItemId: string,
   page = 1,
   limit = 10,
-): Promise<ApiPaginatedResponse<Review>> {
-  const response = await apiRequest.get<ApiPaginatedResponse<Review>>(
+): Promise<ApiPaginatedResponse<MenuItemReview>> {
+  const response = await apiRequest.get<ApiPaginatedResponse<MenuItemReview>>(
     `/orders/menu-items/${menuItemId}/reviews?page=${page}&limit=${limit}`,
   );
   return response.data;

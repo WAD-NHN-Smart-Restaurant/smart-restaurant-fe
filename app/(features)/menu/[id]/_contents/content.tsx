@@ -33,7 +33,7 @@ interface SelectedModifiers {
   [groupId: string]: string[];
 }
 
-interface MenuItemReview {
+export interface MenuItemReview {
   id: string;
   rating: number;
   comment?: string;
