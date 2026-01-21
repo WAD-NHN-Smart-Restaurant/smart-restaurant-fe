@@ -58,9 +58,9 @@ export async function createOrderAsCustomer(
 /**
  * Get current active order for guest's table
  */
-export async function getCurrentOrder(): Promise<ApiResponse<Order>> {
+export async function getCurrentOrder(): Promise<Order> {
   const response = await apiRequest.get<ApiResponse<Order>>("/orders/guest");
-  return response.data;
+  return response.data.data;
 }
 
 /**

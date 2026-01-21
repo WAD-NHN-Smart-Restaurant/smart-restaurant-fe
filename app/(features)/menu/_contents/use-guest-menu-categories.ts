@@ -1,6 +1,7 @@
 import { getGuestMenuCategories } from "@/api/guest-menu-api";
 import { useSafeQuery } from "@/hooks/use-safe-query";
 import Cookies from "js-cookie";
+import { GUEST_TOKEN_COOKIE } from "./content";
 
 const GUEST_MENU_CATEGORIES_QUERY_KEYS = {
   all: ["guest-menu-categories"] as const,
@@ -14,10 +15,7 @@ const GUEST_MENU_CATEGORIES_QUERY_KEYS = {
  */
 export const useGuestMenuCategoriesQuery = (token?: string) => {
   // Token from parameter or from cookie
-  const tokenToUse =
-    token ||
-    Cookies.get("guest_menu_token") ||
-    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN;
+  const tokenToUse = token || Cookies.get(GUEST_TOKEN_COOKIE);
 
   return useSafeQuery(
     GUEST_MENU_CATEGORIES_QUERY_KEYS.list(tokenToUse),

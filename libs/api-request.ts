@@ -1,3 +1,4 @@
+import { GUEST_TOKEN_COOKIE } from "@/app/(features)/menu/_contents/content";
 import axios, { AxiosResponse, AxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 
@@ -5,7 +6,6 @@ import Cookies from "js-cookie";
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = "access_token";
-const GUEST_TOKEN_KEY = "guest_menu_token";
 const UNAUTHORIZED_STATUS = 401;
 // Normalize base URL to always include trailing /api
 const rawBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001")
@@ -65,7 +65,7 @@ axiosInstance.interceptors.request.use((config) => {
   }
 
   // Inject guest menu token if available
-  const guestToken = Cookies.get(GUEST_TOKEN_KEY);
+  const guestToken = Cookies.get(GUEST_TOKEN_COOKIE);
   if (guestToken) {
     config.headers.set("x-guest-token", guestToken);
   }

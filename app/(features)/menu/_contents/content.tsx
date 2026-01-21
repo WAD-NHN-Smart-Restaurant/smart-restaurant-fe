@@ -26,16 +26,13 @@ interface MenuFilters {
   chefRecommended?: boolean;
 }
 
-const GUEST_TOKEN_COOKIE = "guest_menu_token";
+export const GUEST_TOKEN_COOKIE = "guest_menu_token";
 
 export function GuestMenuPreviewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const tokenFromUrl =
-    searchParams.get("token") ||
-    process.env.NEXT_PUBLIC_TEST_TABLE_TOKEN ||
-    undefined;
+  const tokenFromUrl = searchParams.get("token") || undefined;
   const tableIdFromUrl =
     searchParams.get("table") ||
     process.env.NEXT_PUBLIC_TEST_TABLE_ID ||
@@ -66,8 +63,9 @@ export function GuestMenuPreviewContent() {
   useEffect(() => {
     const handleTokenManagement = async () => {
       if (tokenFromUrl) {
+        console.log("Found token in URL:", tokenFromUrl);
         const existingToken = Cookies.get(GUEST_TOKEN_COOKIE);
-
+        console.log("Found token in cookie:", existingToken);
         // Save or update token in cookie if it's different
         if (!existingToken || existingToken !== tokenFromUrl) {
           Cookies.set(GUEST_TOKEN_COOKIE, tokenFromUrl, {
