@@ -614,53 +614,14 @@ export function OrderInfoContent() {
     );
   }
 
-  // Show error if fetch failed
-  if (error && !order) {
-    return (
-      <MobileLayout>
-        <MobileHeader title="Your Orders" tableNumber={tableNumber} />
-        <div
-          style={{
-            paddingBottom: "80px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "60vh",
-            flexDirection: "column",
-            gap: "16px",
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <p
-              style={{
-                fontSize: "18px",
-                color: "#c62828",
-                marginBottom: "16px",
-              }}
-            >
-              ⚠️ {error}
-            </p>
-            <p
-              style={{
-                fontSize: "14px",
-                color: "#7f8c8d",
-                marginBottom: "16px",
-              }}
-            >
-              Please go back and try again or scan your QR code again
-            </p>
-            <Button onClick={() => router.push("/menu")}>Back to Menu</Button>
-          </div>
-        </div>
-        <BottomNav />
-      </MobileLayout>
-    );
-  }
-
   if (!isLoading && !order) {
     return (
       <MobileLayout>
-        <MobileHeader title="Your Orders" tableNumber={tableNumber} />
+        <MobileHeader
+          title="Your Orders"
+          tableNumber={tableNumber}
+          showLeftMenu={isCustomer}
+        />
         <div
           style={{
             paddingBottom: "80px",

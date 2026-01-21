@@ -51,6 +51,8 @@ export interface GuestMenuItem {
   updatedAt: string;
   popularity?: number;
   categoryName?: string;
+  averageRating?: number | null;
+  reviewCount?: number;
   menuItemPhotos: GuestMenuItemPhoto[];
   menuItemModifierGroups: GuestMenuItemModifierGroup[];
 }

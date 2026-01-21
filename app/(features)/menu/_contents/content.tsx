@@ -387,7 +387,35 @@ export function GuestMenuPreviewContent() {
                             gap: "8px",
                           }}
                         >
-                          ☆☆☆☆☆ (0 reviews)
+                          {item.averageRating && item.reviewCount ? (
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                            >
+                              <span style={{ color: "#f59e0b" }}>
+                                {"★".repeat(Math.round(item.averageRating))}
+                                {"☆".repeat(5 - Math.round(item.averageRating))}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.875rem",
+                                  color: "#6b7280",
+                                }}
+                              >
+                                ({item.reviewCount}{" "}
+                                {item.reviewCount === 1 ? "review" : "reviews"})
+                              </span>
+                            </span>
+                          ) : (
+                            <span
+                              style={{ fontSize: "0.875rem", color: "#9ca3af" }}
+                            >
+                              ☆☆☆☆☆ (0 reviews)
+                            </span>
+                          )}
                           {item.popularity && item.popularity > 0 && (
                             <PopularityIndicator
                               popularity={item.popularity}
