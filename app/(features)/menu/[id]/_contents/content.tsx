@@ -545,7 +545,9 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                             {review.profiles?.fullName || "Anonymous"}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {new Date(review.createdAt).toLocaleDateString("en-US", {
+                            {new Date(review.createdAt).toLocaleDateString(
+                              "en-US",
+                              {
                                 year: "numeric",
                                 month: "short",
                                 day: "numeric",
@@ -575,6 +577,10 @@ export function MenuItemDetailContent({ itemId }: { itemId: string }) {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          </div>
+        )}
+
         {/* Recommended Items */}
         {recommendations.length > 0 && (
           <div className="space-y-4">

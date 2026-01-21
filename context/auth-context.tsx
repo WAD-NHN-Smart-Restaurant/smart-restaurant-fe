@@ -23,10 +23,12 @@ import { createClient } from "@/libs/supabase/client";
 import { AUTH_PATHS, PATHS } from "@/data/path";
 import { LoginFormData, RegisterFormData, User } from "@/types/auth-type";
 import { AuthRequiredModal } from "@/components/auth-required-modal";
+import { getProfile, Profile } from "@/api/profile-api";
 
 // Auth context type
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginFormData) => Promise<void>;
@@ -47,6 +49,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(
 // Query keys
 const AUTH_QUERY_KEYS = {
   user: ["auth", "user"] as const,
+  profile: ["auth", "profile"] as const,
   status: ["auth", "status"] as const,
 };
 
@@ -121,6 +124,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       staleTime: 10 * 60 * 1000, // 10 minutes
       retry: false,
       hideErrorSnackbar: true, // Silent user fetch
+    },
+  );
+  // Get user profile with restaurant information
+  const { data: profile = null, isLoading: isProfileLoading } = useSafeQuery(
+    AUTH_QUERY_KEYS.profile,
+    () => getProfile(user?.id || ""),
+    {
+      enabled: isAuthenticated && !!user?.id,
+      staleTime: 10 * 60 * 1000, // 10 minutes
+      retry: false,
+      hideErrorSnackbar: true,
     },
   );
 
@@ -274,7 +288,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const contextValue: AuthContextType = {
     user,
     isAuthenticated,
-    isLoading: isAuthLoading || isUserLoading,
+    isLoading: isAuthLoading || isUserLoading || isProfileLoading,
     login,
     register,
     logout,
@@ -283,6 +297,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLogoutLoading: logoutMutation.isPending,
     loginError: loginMutation.error as Error | null,
     registerError: registerMutation.error as Error | null,
+    profile,
   };
 
   return (
