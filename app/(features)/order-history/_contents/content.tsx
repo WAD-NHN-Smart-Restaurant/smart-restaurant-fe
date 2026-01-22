@@ -38,6 +38,7 @@ import {
   Star,
   MessageSquare,
 } from "lucide-react";
+import { toast } from "react-toastify";
 
 interface OrderHistoryItem {
   id: string;
@@ -160,7 +161,7 @@ export function OrderHistoryContent() {
       }
     } catch (error) {
       console.error("Failed to fetch order history:", error);
-      alert("Failed to load order history");
+      toast.error("Failed to load order history");
     } finally {
       setIsLoadingOrders(false);
     }
@@ -175,7 +176,7 @@ export function OrderHistoryContent() {
       }
     } catch (error) {
       console.error("Failed to fetch reviews:", error);
-      alert("Failed to load reviews");
+      toast.error("Failed to load reviews");
     } finally {
       setIsLoadingReviews(false);
     }
@@ -190,7 +191,7 @@ export function OrderHistoryContent() {
       }
     } catch (error) {
       console.error("Failed to fetch order details:", error);
-      alert("Failed to load order details");
+      toast.error("Failed to load order details");
     }
   };
 
@@ -212,7 +213,7 @@ export function OrderHistoryContent() {
 
   const handleSubmitReview = async () => {
     if (!reviewForm.rating || reviewForm.rating < 1 || reviewForm.rating > 5) {
-      alert("Please select a rating between 1 and 5");
+      toast.error("Please select a rating between 1 and 5");
       return;
     }
 
@@ -226,7 +227,7 @@ export function OrderHistoryContent() {
       });
 
       if (response.success && response.data) {
-        alert("Review submitted successfully!");
+        toast.success("Review submitted successfully!");
         setIsReviewDialogOpen(false);
         setReviewForm({
           menuItemId: "",
@@ -245,7 +246,7 @@ export function OrderHistoryContent() {
       const errorMessage =
         (error as { response?: { data?: { message?: string } } })?.response
           ?.data?.message || "Failed to submit review. Please try again.";
-      alert(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsSubmittingReview(false);
     }
