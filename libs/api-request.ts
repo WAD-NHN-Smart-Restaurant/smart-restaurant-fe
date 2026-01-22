@@ -8,7 +8,7 @@ import Cookies from "js-cookie";
 const ACCESS_TOKEN_KEY = "access_token";
 const UNAUTHORIZED_STATUS = 401;
 // Normalize base URL to always include trailing /api
-const rawBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001")
+const rawBase = (process.env.NEXT_PUBLIC_HOSTNAME || "http://localhost:3001")
   .trim()
   .replace(/\/$/, "");
 const API_BASE_URL = rawBase.endsWith("/api") ? rawBase : `${rawBase}/api`;
